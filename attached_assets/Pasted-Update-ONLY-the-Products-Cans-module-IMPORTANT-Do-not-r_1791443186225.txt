@@ -1,0 +1,159 @@
+Update ONLY the "Products & Cans" module.
+
+IMPORTANT:
+- Do not redesign the existing UI.
+- Keep the existing styling, colors, layout and design.
+- Do not affect Customers, Orders, Deliveries or other modules.
+- All product and stock changes must be saved permanently in Supabase.
+- Do not use fake/static values.
+
+1. INITIAL PRODUCTS
+
+The Products & Cans list should contain ONLY these 3 initial products:
+
+1. 19L
+2. 1.5L
+3. 500ml
+
+Remove the existing "20L Heavy-Duty Can" product from the active product list.
+
+Do not show 20L Heavy-Duty Can as an available product.
+
+2. EDIT PRODUCT
+
+Every product must have an "Edit" option.
+
+When Edit is clicked, allow the user to change:
+- Product name
+- Product details
+- Selling price/rate
+- Any other existing editable product information
+
+Changes must be saved to Supabase and remain after refresh.
+
+3. EDIT STOCK
+
+Every product must have an editable stock value.
+
+For example:
+
+19L
+Current stock: 643
+
+I should be able to edit this manually and change it to:
+
+19L
+Current stock: 200
+
+The same must work for:
+- 1.5L
+- 500ml
+- Any new product added later
+
+Stock changes must be saved permanently in Supabase.
+
+4. STOCK ADJUSTMENT HISTORY
+
+Whenever stock is manually changed, record:
+
+- Product
+- Previous stock
+- New stock
+- Difference
+- Date
+- Time
+- User
+- Reason/Note
+
+Example:
+
+19L
+Previous: 643
+New: 200
+Difference: -443
+Reason: Manual stock adjustment
+
+Do not simply overwrite the number without keeping the adjustment history.
+
+5. ADD NEW PRODUCT
+
+Keep the existing "Add New Product" option.
+
+When I add a new product, it must become a real product stored in Supabase.
+
+Example:
+- Product Name: 5L
+- Stock: 100
+- Selling Rate: PKR 300
+
+The new product must immediately appear in the Products & Cans list.
+
+6. REMOVE PRODUCT
+
+Every product must have a proper "Remove Product" option.
+
+If I create a new product today and want to remove it tomorrow, I must be able to remove it.
+
+When Remove is clicked:
+- Show a confirmation message first.
+- Do not remove the product accidentally.
+
+If the product has NEVER been used in any historical order, sale, delivery or other record:
+- Allow permanent deletion from Supabase.
+
+If the product HAS been used in historical records:
+- Do NOT destroy the historical records.
+- Instead mark the product as Inactive/Archived.
+- Remove it from new orders and active product lists.
+- Keep the old historical records intact.
+
+7. ACTIVE / INACTIVE STATUS
+
+Products should support:
+
+Active
+Inactive / Archived
+
+Only Active products should appear when creating a new order.
+
+Archived products should remain available in historical records.
+
+8. STOCK + PRODUCT ACTIONS
+
+For every product show appropriate actions:
+
+- Edit
+- Edit Stock / Adjust Stock
+- Remove / Archive
+
+For new products, these same actions must automatically be available.
+
+9. REAL DATABASE
+
+Do NOT keep products or stock only in frontend state.
+
+Products, product edits, stock changes, active/inactive status and stock history must all persist in Supabase.
+
+After:
+- Page refresh
+- Logout/login
+- Restarting the app
+
+the saved product and stock information must still be there.
+
+10. IMPORTANT
+
+Do not change anything outside the Products & Cans module.
+
+Do not redesign the page.
+
+After implementation, test these exact scenarios:
+
+A. Change 19L stock from 643 to 200.
+B. Refresh the page and verify it remains 200.
+C. Edit a product.
+D. Add a new product.
+E. Remove the newly added product.
+F. Verify that a product used in historical records is archived instead of destroying its history.
+
+Only finish when all of these work correctly.

@@ -5,3 +5,9 @@ channel = "stable-25_05"
 
 [agent]
 expertMode = true
+
+[userenv]
+
+[userenv.shared]
+VITE_SUPABASE_URL = "https://dfzduewbtosfzbcvsyao.supabase.co"
+VITE_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_d7Gqh6b68wJl1pTi9Nocsg_OnQmpt_Z"

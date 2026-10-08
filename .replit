@@ -11,3 +11,35 @@ expertMode = true
 [userenv.shared]
 VITE_SUPABASE_URL = "https://dfzduewbtosfzbcvsyao.supabase.co"
 VITE_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_d7Gqh6b68wJl1pTi9Nocsg_OnQmpt_Z"
+
+[[ports]]
+localPort = 3000
+externalPort = 3000
+
+[[ports]]
+localPort = 24678
+externalPort = 80
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bun run dev"
+waitForPort = 3000
+
+[workflows.workflow.metadata]
+outputType = "console"

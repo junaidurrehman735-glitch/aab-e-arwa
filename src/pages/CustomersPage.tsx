@@ -9,6 +9,8 @@ import {
   Payment,
   APPROVED_DELIVERY_AREAS,
   APPROVED_CUSTOMER_TYPES,
+  CUSTOMER_TYPE_IDS,
+  LEGACY_CUSTOMER_TYPE_NAMES,
   CASH_STATUSES,
   CashStatus,
 } from '../types/index.ts';
@@ -78,13 +80,10 @@ export const CustomersPage: React.FC = () => {
   // Form states - strict adherence to updated fields
   const [formData, setFormData] = useState({
     name: '',
-    contact_person: '',
     phone: '',
-    whatsapp: '',
     address: '',
     area: APPROVED_DELIVERY_AREAS[0] as string,
-    area_access: 'Specific Area' as 'Specific Area' | 'All Delivery Areas',
-    customer_type_id: 'ct-home',
+    customer_type_id: CUSTOMER_TYPE_IDS['Residential Home'],
     selling_rate: '',
     cash_status: 'Cash on Delivery' as CashStatus,
     payment_type: 'Cash' as 'Cash' | 'Credit',
@@ -261,13 +260,10 @@ export const CustomersPage: React.FC = () => {
   const resetForm = () => {
     setFormData({
       name: '',
-      contact_person: '',
       phone: '',
-      whatsapp: '',
       address: '',
       area: APPROVED_DELIVERY_AREAS[0],
-      area_access: 'Specific Area',
-      customer_type_id: 'ct-home',
+      customer_type_id: CUSTOMER_TYPE_IDS['Residential Home'],
       selling_rate: '',
       cash_status: 'Cash on Delivery',
       payment_type: 'Cash',
@@ -281,17 +277,18 @@ export const CustomersPage: React.FC = () => {
 
   const openEdit = (cust: Customer) => {
     setSelectedCustomer(cust);
-    // Find matching type ID if by name
-    const matchedType = types.find((t) => t.id === cust.customer_type_id || t.name === cust.customer_type_name);
+    const legacyTypeName = cust.customer_type_name
+      ? LEGACY_CUSTOMER_TYPE_NAMES[cust.customer_type_name.trim().toLowerCase()]
+      : undefined;
+    const matchedType = types.find(
+      (t) => t.id === cust.customer_type_id || t.name === legacyTypeName
+    );
     setFormData({
       name: cust.name,
-      contact_person: cust.contact_person || '',
       phone: cust.phone,
-      whatsapp: cust.whatsapp || '',
       address: cust.address,
       area: APPROVED_DELIVERY_AREAS.includes(cust.area as any) ? cust.area : APPROVED_DELIVERY_AREAS[0],
-      area_access: cust.area_access || 'Specific Area',
-      customer_type_id: matchedType?.id || 'ct-home',
+      customer_type_id: matchedType?.id || CUSTOMER_TYPE_IDS[legacyTypeName || 'Other'],
       selling_rate: cust.selling_rate > 0 ? String(cust.selling_rate) : '',
       cash_status: (cust.cash_status as CashStatus) || 'Cash on Delivery',
       payment_type: cust.payment_type || 'Cash',
@@ -475,7 +472,7 @@ export const CustomersPage: React.FC = () => {
 
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
-                        {cust.customer_type_name || 'Home'}
+                        {cust.customer_type_name || 'Residential Home'}
                       </span>
                     </td>
 
@@ -555,7 +552,7 @@ export const CustomersPage: React.FC = () => {
         <form onSubmit={handleCreateCustomer} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Customer / Organization Name *</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Customer Name *</label>
               <input
                 type="text"
                 required
@@ -567,34 +564,12 @@ export const CustomersPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Contact Person (Optional)</label>
-              <input
-                type="text"
-                value={formData.contact_person}
-                onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
-                placeholder="Incharge / Focal Person"
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500"
-              />
-            </div>
-
-            <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Phone Number *</label>
               <input
                 type="text"
                 required
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="0300 1234567"
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">WhatsApp Number</label>
-              <input
-                type="text"
-                value={formData.whatsapp}
-                onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
                 placeholder="0300 1234567"
                 className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500"
               />
@@ -629,20 +604,7 @@ export const CustomersPage: React.FC = () => {
               </select>
             </div>
 
-            {/* H. CUSTOMER DELIVERY AREA ACCESS */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Delivery Area Access</label>
-              <select
-                value={formData.area_access}
-                onChange={(e) => setFormData({ ...formData, area_access: e.target.value as any })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500"
-              >
-                <option value="Specific Area">Specific Area ({formData.area})</option>
-                <option value="All Delivery Areas">All Delivery Areas</option>
-              </select>
-            </div>
-
-            {/* A. CUSTOMER TYPE - Home, Office, Restaurant, Shop, Other */}
+            {/* A. CUSTOMER TYPE - Residential Home, Restaurant, Office, Shop, Other */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Customer Type</label>
               <select
@@ -657,7 +619,7 @@ export const CustomersPage: React.FC = () => {
                       </option>
                     ))
                   : APPROVED_CUSTOMER_TYPES.map((t) => (
-                      <option key={t} value={`ct-${t.toLowerCase()}`}>
+                      <option key={t} value={CUSTOMER_TYPE_IDS[t]}>
                         {t}
                       </option>
                     ))}
@@ -767,22 +729,12 @@ export const CustomersPage: React.FC = () => {
         <form onSubmit={handleUpdateCustomer} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Customer / Organization Name *</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Customer Name *</label>
               <input
                 type="text"
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Contact Person</label>
-              <input
-                type="text"
-                value={formData.contact_person}
-                onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
                 className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500"
               />
             </div>
@@ -794,16 +746,6 @@ export const CustomersPage: React.FC = () => {
                 required
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">WhatsApp Number</label>
-              <input
-                type="text"
-                value={formData.whatsapp}
-                onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
                 className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500"
               />
             </div>
@@ -836,19 +778,6 @@ export const CustomersPage: React.FC = () => {
               </select>
             </div>
 
-            {/* H. CUSTOMER DELIVERY AREA ACCESS */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Delivery Area Access</label>
-              <select
-                value={formData.area_access}
-                onChange={(e) => setFormData({ ...formData, area_access: e.target.value as any })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500"
-              >
-                <option value="Specific Area">Specific Area ({formData.area})</option>
-                <option value="All Delivery Areas">All Delivery Areas</option>
-              </select>
-            </div>
-
             {/* A. CUSTOMER TYPE */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Customer Type</label>
@@ -864,7 +793,7 @@ export const CustomersPage: React.FC = () => {
                       </option>
                     ))
                   : APPROVED_CUSTOMER_TYPES.map((t) => (
-                      <option key={t} value={`ct-${t.toLowerCase()}`}>
+                      <option key={t} value={CUSTOMER_TYPE_IDS[t]}>
                         {t}
                       </option>
                     ))}
@@ -1045,7 +974,7 @@ export const CustomersPage: React.FC = () => {
                 <div>
                   <span className="text-slate-400 block text-[10px] uppercase font-semibold">Customer Type</span>
                   <span className="font-semibold text-slate-800">
-                    {customerDetails.customer.customer_type_name || 'Home'}
+                    {customerDetails.customer.customer_type_name || 'Residential Home'}
                   </span>
                 </div>
                 <div>

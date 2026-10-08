@@ -43,14 +43,37 @@ export const APPROVED_DELIVERY_AREAS = [
 export type DeliveryArea = typeof APPROVED_DELIVERY_AREAS[number];
 
 export const APPROVED_CUSTOMER_TYPES = [
-  'Home',
-  'Office',
+  'Residential Home',
   'Restaurant',
+  'Office',
   'Shop',
   'Other',
 ] as const;
 
 export type CustomerTypeName = typeof APPROVED_CUSTOMER_TYPES[number];
+
+export const CUSTOMER_TYPE_IDS: Record<CustomerTypeName, string> = {
+  'Residential Home': 'ct-home',
+  Restaurant: 'ct-restaurant',
+  Office: 'ct-office',
+  Shop: 'ct-shop',
+  Other: 'ct-other',
+};
+
+export const LEGACY_CUSTOMER_TYPE_NAMES: Record<string, CustomerTypeName> = {
+  home: 'Residential Home',
+  residential: 'Residential Home',
+  'residential home': 'Residential Home',
+  restaurant: 'Restaurant',
+  office: 'Office',
+  commercial: 'Office',
+  shop: 'Shop',
+  retail: 'Shop',
+  other: 'Other',
+  industry: 'Other',
+  industrial: 'Other',
+};
+
 
 export const CASH_STATUSES = [
   'Cash on Delivery',

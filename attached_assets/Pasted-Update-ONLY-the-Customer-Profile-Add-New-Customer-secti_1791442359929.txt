@@ -1,0 +1,114 @@
+Update ONLY the "Customer Profile / Add New Customer" section.
+
+IMPORTANT:
+- Do not redesign the UI.
+- Keep the existing design, styling, colors, spacing, buttons and layout.
+- Do not change any other module.
+- Do not remove existing customer data.
+- Make sure these changes work for both creating a new customer AND editing an existing customer.
+- Save all changes properly so they persist after refresh.
+
+1. CUSTOMER NAME + CONTACT PERSON
+
+Currently there are two separate fields:
+- Customer Name
+- Contact Person
+
+Remove the "Contact Person" field completely.
+
+Keep only:
+- Customer Name *
+
+2. PHONE NUMBER
+
+Currently there are separate fields:
+- Phone Number
+- WhatsApp Number
+
+Remove "WhatsApp Number" completely.
+
+Keep only:
+- Phone Number *
+
+Do not create a separate WhatsApp field.
+
+3. CUSTOMER TYPE
+
+Replace the current Customer Type options completely.
+
+Remove all existing options such as:
+- Home
+- Commercial
+- Industry
+- Office
+- Other
+- Any other existing option
+
+Customer Type must contain ONLY these 5 options:
+
+1. Residential Home
+2. Restaurant
+3. Office
+4. Shop
+5. Other
+
+No additional options.
+
+4. DELIVERY AREA / SECTOR
+
+Keep the existing "Delivery Area / Sector" field.
+
+It must contain ONLY these 5 options:
+
+1. Chiltan Scheme Airport Road
+2. Nawa Killi Bypass
+3. Main Jinnah Road
+4. Quetta Avenue City
+5. Other
+
+Do not add any other area/sector options.
+
+5. DELIVERY AREA ACCESS
+
+Remove the entire "Delivery Area Access" section/box completely.
+
+This includes removing:
+- Specific Area
+- All Delivery Access
+- Any related dropdown, radio buttons, labels or controls
+
+There should be NO "Delivery Area Access" section anywhere inside the Customer Profile form.
+
+The customer's delivery area should be determined only by the "Delivery Area / Sector" field.
+
+6. KEEP THE REST OF CUSTOMER PROFILE
+
+Keep all other existing customer fields exactly as they are, including:
+- Street Address
+- City/location fields
+- Agreed Selling Rate
+- Cash Status
+- Company Cans With Customer
+- Net Deposit Amount
+- Any other already-existing required customer fields
+
+Do not unnecessarily remove or rename them.
+
+7. DATA CONSISTENCY
+
+Make sure the new Customer Type values and Delivery Area/Sector values are used consistently wherever the customer is created, edited, displayed or filtered.
+
+Old Customer Type values should not appear in the new dropdown.
+
+Old Delivery Area/Sector values should not appear in the new dropdown.
+
+Existing customer records should not be deleted.
+
+After completing the changes, verify:
+- Add New Customer works
+- Edit Customer works
+- Save works
+- Data persists after refresh
+- Customer details display correctly in the customer list/profile
+
+Do not make any other changes.

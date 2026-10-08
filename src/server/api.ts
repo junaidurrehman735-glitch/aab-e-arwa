@@ -2,8 +2,32 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { queryOne, queryAll, runQuery, transaction } from './db.ts';
 import { authenticate, checkPermission, generateToken, logAudit, AuthRequest } from './auth.ts';
+import {
+  APPROVED_CUSTOMER_TYPES,
+  APPROVED_DELIVERY_AREAS,
+  CUSTOMER_TYPE_IDS,
+} from '../types/index.ts';
 
 export const apiRouter = Router();
+
+const CUSTOMER_TYPE_NAME_SQL = `CASE
+  WHEN c.customer_type_id IN ('ct-home', 'ct-residential', 'ct-residential-home')
+    OR lower(ct.name) IN ('home', 'residential', 'residential home') THEN 'Residential Home'
+  WHEN c.customer_type_id = 'ct-restaurant' OR lower(ct.name) = 'restaurant' THEN 'Restaurant'
+  WHEN c.customer_type_id IN ('ct-office', 'ct-commercial')
+    OR lower(ct.name) IN ('office', 'commercial') THEN 'Office'
+  WHEN c.customer_type_id IN ('ct-shop', 'ct-retail')
+    OR lower(ct.name) IN ('shop', 'retail') THEN 'Shop'
+  ELSE 'Other'
+END`;
+
+const APPROVED_CUSTOMER_TYPE_IDS = new Set(Object.values(CUSTOMER_TYPE_IDS));
+
+const isApprovedDeliveryArea = (area: unknown) =>
+  typeof area === 'string' && APPROVED_DELIVERY_AREAS.includes(area as (typeof APPROVED_DELIVERY_AREAS)[number]);
+
+const isApprovedCustomerTypeId = (id: unknown) =>
+  typeof id === 'string' && APPROVED_CUSTOMER_TYPE_IDS.has(id);
 
 // ==========================================
 // 1. AUTHENTICATION & PROFILE
@@ -250,7 +274,7 @@ apiRouter.get('/dashboard/summary', authenticate, (req: AuthRequest, res: Respon
 apiRouter.get('/customers', authenticate, checkPermission('customers', 'can_view'), (req: Request, res: Response) => {
   const { search, area, type, paymentType, cashStatus } = req.query;
   let sql = `
-    SELECT c.*, ct.name as customer_type_name
+    SELECT c.*, ${CUSTOMER_TYPE_NAME_SQL} as customer_type_name
     FROM customers c
     LEFT JOIN customer_types ct ON c.customer_type_id = ct.id
     WHERE 1=1
@@ -269,8 +293,12 @@ apiRouter.get('/customers', authenticate, checkPermission('customers', 'can_view
   }
 
   if (type) {
-    sql += ` AND (c.customer_type_id = ? OR ct.name = ?)`;
-    params.push(type, type);
+    const requestedType = APPROVED_CUSTOMER_TYPES.find((name) => name === String(type));
+    if (!requestedType) {
+      return res.status(400).json({ error: 'Invalid customer type filter' });
+    }
+    sql += ` AND (${CUSTOMER_TYPE_NAME_SQL}) = ?`;
+    params.push(requestedType);
   }
 
   if (paymentType) {
@@ -290,13 +318,18 @@ apiRouter.get('/customers', authenticate, checkPermission('customers', 'can_view
 });
 
 apiRouter.get('/customers/types', authenticate, (req: Request, res: Response) => {
-  const types = queryAll('SELECT * FROM customer_types ORDER BY name ASC;');
+  const types = APPROVED_CUSTOMER_TYPES.map((name) => ({
+    id: CUSTOMER_TYPE_IDS[name],
+    name,
+    description: '',
+    default_discount: 0,
+  }));
   res.json(types);
 });
 
 apiRouter.get('/customers/:id', authenticate, checkPermission('customers', 'can_view'), (req: Request, res: Response) => {
   const customer = queryOne(
-    `SELECT c.*, ct.name as customer_type_name
+    `SELECT c.*, ${CUSTOMER_TYPE_NAME_SQL} as customer_type_name
      FROM customers c
      LEFT JOIN customer_types ct ON c.customer_type_id = ct.id
      WHERE c.id = ?;`,
@@ -378,6 +411,12 @@ apiRouter.post('/customers', authenticate, checkPermission('customers', 'can_cre
     return res.status(400).json({ error: 'Name, phone, address, and delivery area are required' });
   }
 
+  const selectedArea = String(area).trim();
+  const selectedTypeId = customer_type_id || CUSTOMER_TYPE_IDS['Residential Home'];
+  if (!isApprovedDeliveryArea(selectedArea) || !isApprovedCustomerTypeId(selectedTypeId)) {
+    return res.status(400).json({ error: 'Select an approved delivery area and customer type' });
+  }
+
   const id = `cust-${Date.now()}`;
   const cansHeld = Number(company_cans !== undefined ? company_cans : (cans_held !== undefined ? cans_held : initial_cans)) || 0;
   const deposit = Number(net_deposit_amount) || 0;
@@ -393,8 +432,8 @@ apiRouter.post('/customers', authenticate, checkPermission('customers', 'can_cre
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?);`,
       [
         id, name.trim(), contact_person || '', phone.trim(), whatsapp || phone.trim(),
-        address.trim(), area.trim(), area_access || 'Specific Area',
-        customer_type_id || 'ct-home', rate, payment_type || 'Cash', cashStat,
+        address.trim(), selectedArea, area_access || 'Specific Area',
+        selectedTypeId, rate, payment_type || 'Cash', cashStat,
         cansHeld, deposit, notes || '', delivery_instructions || ''
       ]
     );
@@ -426,6 +465,17 @@ apiRouter.put('/customers/:id', authenticate, checkPermission('customers', 'can_
     return res.status(404).json({ error: 'Customer not found' });
   }
 
+  const updatedArea = area === undefined ? existing.area : String(area).trim();
+  const updatedCustomerTypeId = customer_type_id === undefined
+    ? existing.customer_type_id
+    : (customer_type_id || CUSTOMER_TYPE_IDS['Residential Home']);
+  if (
+    (area !== undefined && !isApprovedDeliveryArea(updatedArea)) ||
+    (customer_type_id !== undefined && !isApprovedCustomerTypeId(updatedCustomerTypeId))
+  ) {
+    return res.status(400).json({ error: 'Select an approved delivery area and customer type' });
+  }
+
   const updatedCans = company_cans !== undefined 
     ? Number(company_cans) 
     : (cans_held !== undefined ? Number(cans_held) : existing.cans_held);
@@ -437,6 +487,12 @@ apiRouter.put('/customers/:id', authenticate, checkPermission('customers', 'can_
     : existing.selling_rate;
   const updatedCashStatus = cash_status || existing.cash_status || 'Cash on Delivery';
   const updatedAreaAccess = area_access || existing.area_access || 'Specific Area';
+  const updatedContactPerson = contact_person === undefined
+    ? (existing.contact_person || '')
+    : (contact_person || '');
+  const updatedWhatsapp = whatsapp === undefined
+    ? (existing.whatsapp || '')
+    : (whatsapp || '');
 
   transaction(() => {
     runQuery(
@@ -447,8 +503,8 @@ apiRouter.put('/customers/:id', authenticate, checkPermission('customers', 'can_
          status = ?, notes = ?, delivery_instructions = ?, updated_at = datetime('now')
        WHERE id = ?;`,
       [
-        name, contact_person || '', phone, whatsapp || '', address, area, updatedAreaAccess,
-        customer_type_id, updatedRate, payment_type || existing.payment_type || 'Cash', updatedCashStatus,
+        name, updatedContactPerson, phone, updatedWhatsapp, address, updatedArea, updatedAreaAccess,
+        updatedCustomerTypeId, updatedRate, payment_type || existing.payment_type || 'Cash', updatedCashStatus,
         updatedCans, updatedDeposit,
         status || 'active', notes || '', delivery_instructions || '', req.params.id
       ]

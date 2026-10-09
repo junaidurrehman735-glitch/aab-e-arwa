@@ -1,0 +1,1 @@
+- [Portable npm installs](node-package-installs.md) — Replit’s npm mirror and package setup can affect lockfile portability and toolchain config; verify both before committing.

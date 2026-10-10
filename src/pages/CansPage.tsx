@@ -88,11 +88,33 @@ export const CansPage: React.FC = () => {
     }
   };
 
-  const filteredRankings = data?.customerRankings.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.phone.includes(search) ||
-    c.area.toLowerCase().includes(search.toLowerCase())
-  ) || [];
+  const filteredRankings = (data?.customerRankings || []).filter((c) =>
+    (c?.name || '').toLowerCase().includes(search.toLowerCase()) ||
+    (c?.phone || '').includes(search) ||
+    (c?.area || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  const recentMovements = data?.recentCanMovements || [];
+
+  if (loading && !data) {
+    return (
+      <div className="space-y-6 animate-pulse">
+        <div className="flex justify-between items-center">
+          <div className="h-6 bg-slate-200 rounded w-1/3" />
+          <div className="h-9 bg-slate-200 rounded w-32" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-24 bg-slate-200/70 rounded-xl" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="h-80 bg-slate-200/70 rounded-xl" />
+          <div className="h-80 bg-slate-200/70 rounded-xl" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -117,87 +139,85 @@ export const CansPage: React.FC = () => {
       </div>
 
       {/* KPI Reconciliation Banner */}
-      {data && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {/* Total Reusable Bottles Owned */}
-          <div className="bg-slate-900 text-white p-4 rounded-xl border border-slate-800 shadow-xs flex flex-col justify-between col-span-2 sm:col-span-1">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-              Total Company Cans
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {/* Total Reusable Bottles Owned */}
+        <div className="bg-slate-900 text-white p-4 rounded-xl border border-slate-800 shadow-xs flex flex-col justify-between col-span-2 sm:col-span-1">
+          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            Total Company Cans
+          </span>
+          <div className="my-2">
+            <span className="text-2xl font-bold tabular-nums text-white">
+              {(data?.metrics?.totalCompanyCans || 0).toLocaleString()}
             </span>
-            <div className="my-2">
-              <span className="text-2xl font-bold tabular-nums text-white">
-                {data.metrics.totalCompanyCans.toLocaleString()}
-              </span>
-            </div>
-            <span className="text-[10px] text-slate-400">Total verified asset base</span>
           </div>
-
-          {/* Empty in Warehouse */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              Empty in Plant
-            </span>
-            <div className="my-2">
-              <span className="text-2xl font-bold tabular-nums text-slate-800">
-                {data.metrics.emptyInWarehouse.toLocaleString()}
-              </span>
-            </div>
-            <span className="text-[10px] text-slate-400">Ready for sanitization</span>
-          </div>
-
-          {/* Filled in Warehouse */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              Filled in Plant
-            </span>
-            <div className="my-2">
-              <span className="text-2xl font-bold tabular-nums text-sky-600">
-                {data.metrics.filledInWarehouse.toLocaleString()}
-              </span>
-            </div>
-            <span className="text-[10px] text-slate-400">Sealed finished stock</span>
-          </div>
-
-          {/* With Customers */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              With Customers
-            </span>
-            <div className="my-2">
-              <span className="text-2xl font-bold tabular-nums text-cyan-700">
-                {data.metrics.withCustomers.toLocaleString()}
-              </span>
-            </div>
-            <span className="text-[10px] text-slate-400">Field held company cans</span>
-          </div>
-
-          {/* Damaged */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              Damaged Cans
-            </span>
-            <div className="my-2">
-              <span className="text-2xl font-bold tabular-nums text-rose-600">
-                {data.metrics.damagedCans.toLocaleString()}
-              </span>
-            </div>
-            <span className="text-[10px] text-slate-400">Cracked or scrap</span>
-          </div>
-
-          {/* Lost */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              Lost / Unreturned
-            </span>
-            <div className="my-2">
-              <span className="text-2xl font-bold tabular-nums text-amber-600">
-                {data.metrics.lostCans.toLocaleString()}
-              </span>
-            </div>
-            <span className="text-[10px] text-slate-400">Write-off pending</span>
-          </div>
+          <span className="text-[10px] text-slate-400">Total verified asset base</span>
         </div>
-      )}
+
+        {/* Empty in Warehouse */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+            Empty in Plant
+          </span>
+          <div className="my-2">
+            <span className="text-2xl font-bold tabular-nums text-slate-800">
+              {(data?.metrics?.emptyInWarehouse || 0).toLocaleString()}
+            </span>
+          </div>
+          <span className="text-[10px] text-slate-400">Ready for sanitization</span>
+        </div>
+
+        {/* Filled in Warehouse */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+            Filled in Plant
+          </span>
+          <div className="my-2">
+            <span className="text-2xl font-bold tabular-nums text-sky-600">
+              {(data?.metrics?.filledInWarehouse || 0).toLocaleString()}
+            </span>
+          </div>
+          <span className="text-[10px] text-slate-400">Sealed finished stock</span>
+        </div>
+
+        {/* With Customers */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+            With Customers
+          </span>
+          <div className="my-2">
+            <span className="text-2xl font-bold tabular-nums text-cyan-700">
+              {(data?.metrics?.withCustomers || 0).toLocaleString()}
+            </span>
+          </div>
+          <span className="text-[10px] text-slate-400">Field held company cans</span>
+        </div>
+
+        {/* Damaged */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+            Damaged Cans
+          </span>
+          <div className="my-2">
+            <span className="text-2xl font-bold tabular-nums text-rose-600">
+              {(data?.metrics?.damagedCans || 0).toLocaleString()}
+            </span>
+          </div>
+          <span className="text-[10px] text-slate-400">Cracked or scrap</span>
+        </div>
+
+        {/* Lost */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+            Lost / Unreturned
+          </span>
+          <div className="my-2">
+            <span className="text-2xl font-bold tabular-nums text-amber-600">
+              {(data?.metrics?.lostCans || 0).toLocaleString()}
+            </span>
+          </div>
+          <span className="text-[10px] text-slate-400">Write-off pending</span>
+        </div>
+      </div>
 
       {/* Main Grid: Customer Can Allocation List & Recent Can Movements */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -282,14 +302,14 @@ export const CansPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 tabular-nums">
-                {(!data || data.recentCanMovements.length === 0) ? (
+                {recentMovements.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="p-4 text-center text-slate-400">
                       No bottle movements recorded yet.
                     </td>
                   </tr>
                 ) : (
-                  data.recentCanMovements.map((m) => (
+                  recentMovements.map((m) => (
                     <tr key={m.id} className="hover:bg-slate-50/70">
                       <td className="px-3 py-2.5">
                         <div className="font-medium text-slate-900">{m.customer_name}</div>
@@ -339,7 +359,7 @@ export const CansPage: React.FC = () => {
               className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500"
             >
               <option value="">-- Choose Customer --</option>
-              {data?.customerRankings.map((c) => (
+              {(data?.customerRankings || []).map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} ({c.area}) - Currently has {c.cans_held} cans
                 </option>

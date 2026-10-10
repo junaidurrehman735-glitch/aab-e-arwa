@@ -24,7 +24,7 @@ import { AuditPage } from './pages/AuditPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
 
 function MainLayout() {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading, user, hasPermission } = useAuth();
   const [currentPage, setCurrentPage] = useState<string>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -64,6 +64,29 @@ function MainLayout() {
   };
 
   const renderPage = () => {
+    // Role-based route guard: verify module permission before rendering
+    if (currentPage !== 'dashboard' && !hasPermission(currentPage, 'can_view')) {
+      return (
+        <div className="bg-white rounded-xl border border-red-200/80 p-8 text-center max-w-md mx-auto my-12 shadow-xs space-y-4">
+          <div className="w-12 h-12 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto text-xl font-bold">
+            !
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-900">Access Restricted</h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Your assigned role ({user?.role_name || 'Staff'}) does not have permission to access the {pageTitles[currentPage] || currentPage} module.
+            </p>
+          </div>
+          <button
+            onClick={() => setCurrentPage('dashboard')}
+            className="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            Return to Dashboard
+          </button>
+        </div>
+      );
+    }
+
     switch (currentPage) {
       case 'dashboard':
         return <DashboardPage onNavigate={setCurrentPage} />;
@@ -135,12 +158,64 @@ function MainLayout() {
   );
 }
 
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, ErrorBoundaryState> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('App ErrorBoundary caught error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6">
+          <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-xl p-6 text-center space-y-4 shadow-xl">
+            <div className="w-12 h-12 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-full flex items-center justify-center mx-auto text-xl font-bold">
+              !
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white">Application Loading Error</h2>
+              <p className="text-xs text-slate-400 mt-1">
+                {this.state.error?.message || 'An unexpected rendering error occurred.'}
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                localStorage.clear();
+                window.location.reload();
+              }}
+              className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+            >
+              Reset Session & Reload
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <MainLayout />
-      </AuthProvider>
-    </ToastProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <AuthProvider>
+          <MainLayout />
+        </AuthProvider>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }

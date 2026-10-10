@@ -76,9 +76,31 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
     );
   }
 
-  const { kpis, recentDeliveries, recentOrders, lowStock, topDebtors, salesTrend } = data;
+  const {
+    kpis = {
+      todaySales: 0,
+      todayCollections: 0,
+      todayExpenses: 0,
+      totalReceivables: 0,
+      filledStock: 0,
+      emptyCansStock: 0,
+      cansWithCustomers: 0,
+      deliveriesToday: 0,
+      deliveriesDelivered: 0,
+      deliveriesInTransit: 0,
+      deliveriesPending: 0,
+      monthlyRevenue: 0,
+      monthlyExpenses: 0,
+      monthlyProfit: 0,
+    },
+    recentDeliveries = [],
+    recentOrders = [],
+    lowStock = [],
+    topDebtors = [],
+    salesTrend = [],
+  } = data || ({} as any);
 
-  const maxSalesTrend = Math.max(...salesTrend.map((t) => t.amount), 1000);
+  const maxSalesTrend = Math.max(...(salesTrend || []).map((t) => t?.amount || 0), 1000);
 
   return (
     <div className="space-y-6">

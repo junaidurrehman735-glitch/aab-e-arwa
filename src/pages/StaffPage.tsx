@@ -154,7 +154,7 @@ export const StaffPage: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight">Staff & Access Control (RBAC)</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Individual user accounts for Owner, Manager, Accountant, Sales, Warehouse, and Delivery drivers.
+            Individual user accounts for Owner, Manager, and Delivery Boy.
           </p>
         </div>
 

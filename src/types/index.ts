@@ -1,9 +1,6 @@
 export type UserRole =
   | 'role-owner'
   | 'role-manager'
-  | 'role-accountant'
-  | 'role-sales'
-  | 'role-warehouse'
   | 'role-delivery';
 
 export interface User {

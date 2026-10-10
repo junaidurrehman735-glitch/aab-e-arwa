@@ -2,9 +2,6 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { getDatabase } from './src/server/db.ts';
-import { seedInitialData } from './src/server/seed.ts';
-import { apiRouter } from './src/server/api.ts';
 
 dotenv.config();
 
@@ -26,20 +23,19 @@ app.use((req, res, next) => {
   next();
 });
 
-// Mount API router
-app.use('/api', apiRouter);
-
-// Health check
+// Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', brand: 'AAB E ARWA', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    brand: 'AAB E ARWA',
+    database: 'Supabase PostgreSQL',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 async function startServer() {
   try {
-    console.log('Initializing SQLite database engine...');
-    await getDatabase();
-    await seedInitialData();
-    console.log('Database ready.');
+    console.log('AAB E ARWA: Supabase PostgreSQL production backend configured.');
 
     if (isDev) {
       console.log('Mounting Vite dev middleware...');
@@ -58,7 +54,7 @@ async function startServer() {
     }
 
     app.listen(PORT, '0.0.0.0', () => {
-      console.log(`AAB E ARWA Water Management Server running on http://0.0.0.0:${PORT}`);
+      console.log(`AAB E ARWA Water Management running on http://0.0.0.0:${PORT}`);
     });
   } catch (err) {
     console.error('Fatal startup error:', err);

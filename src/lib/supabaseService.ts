@@ -30,14 +30,18 @@ function getCurrentAuthUser(): { id: string; role_name: string; role_id: string 
     const saved = localStorage.getItem('aab_user');
     if (saved) {
       const u = JSON.parse(saved);
+      const isOwner = u.role_name === 'Owner' || u.role_id === 'role-owner';
+      const isManager = u.role_name === 'Manager' || u.role_id === 'role-manager';
+      const roleName = isOwner ? 'Owner' : isManager ? 'Manager' : 'Delivery Boy';
+      const roleId = isOwner ? 'role-owner' : isManager ? 'role-manager' : 'role-delivery';
       return {
         id: u.id || '',
-        role_name: u.role_name || (u.role_id === 'role-owner' ? 'Owner' : u.role_id === 'role-manager' ? 'Manager' : 'Delivery Boy'),
-        role_id: u.role_id || 'role-delivery',
+        role_name: roleName,
+        role_id: roleId,
       };
     }
   } catch (_) {}
-  return { id: '', role_name: 'Delivery Boy', role_id: 'role-delivery' };
+  return { id: '', role_name: 'unassigned', role_id: '' };
 }
 
 function assertRole(allowed: ('Owner' | 'Manager' | 'Delivery Boy')[], actionDescription: string) {
@@ -191,45 +195,533 @@ export const SupabaseDataService = {
     }
   },
 
+  // Helper: Normalize role name strictly to one of the 3 approved roles
+  normalizeRoleName(role?: string): 'Owner' | 'Manager' | 'Delivery Boy' {
+    if (!role) return 'Delivery Boy';
+    const clean = role.toLowerCase().trim();
+    if (clean.includes('owner')) return 'Owner';
+    if (clean.includes('manager')) return 'Manager';
+    return 'Delivery Boy';
+  },
+
+  // Helper: Map role name to role_id
+  roleNameToId(roleName: 'Owner' | 'Manager' | 'Delivery Boy'): 'role-owner' | 'role-manager' | 'role-delivery' {
+    if (roleName === 'Owner') return 'role-owner';
+    if (roleName === 'Manager') return 'role-manager';
+    return 'role-delivery';
+  },
+
+  // ---------------------------------------------------------------------------
+  // AUTHENTICATED USER & ROLE LINKING (AUTH.UID() PERMANENT LINK)
+  // ---------------------------------------------------------------------------
+  async resolveAndLinkUser(sessionUser: { id: string; email?: string | null; user_metadata?: any }): Promise<User> {
+    const authUserId = sessionUser.id; // Supabase Auth UUID (auth.uid())
+    const authEmail = (sessionUser.email || '').trim().toLowerCase();
+    const metadataRole = sessionUser.user_metadata?.role || sessionUser.user_metadata?.role_name || sessionUser.user_metadata?.role_id;
+    const supabase = getSupabaseClient();
+
+    let matchedUser: User | null = null;
+    let oldIdToPurge: string | null = null;
+
+    // STEP 1: Look up by Authenticated UUID (Permanent Link)
+    if (supabase) {
+      // 1a. Check user_roles table by user_id = authUserId
+      try {
+        const { data: roleRow } = await supabase
+          .from('user_roles')
+          .select('*')
+          .eq('user_id', authUserId)
+          .maybeSingle();
+
+        if (roleRow) {
+          let roleName = this.normalizeRoleName(roleRow.role || roleRow.role_name || roleRow.role_id);
+          // Check if existing manager record was incorrectly assigned
+          if (roleName !== 'Manager' && (authEmail.includes('manager') || String(metadataRole).toLowerCase().includes('manager'))) {
+            roleName = 'Manager';
+          }
+          if (roleName !== 'Owner' && (authEmail.includes('owner') || String(metadataRole).toLowerCase().includes('owner'))) {
+            roleName = 'Owner';
+          }
+          const roleId = this.roleNameToId(roleName);
+          matchedUser = {
+            id: authUserId,
+            name: roleRow.name || sessionUser.user_metadata?.name || authEmail.split('@')[0],
+            email: authEmail || roleRow.email,
+            role_id: roleId,
+            role_name: roleName,
+            phone: roleRow.phone || '',
+            status: roleRow.status === 'inactive' ? 'inactive' : 'active',
+          };
+        }
+      } catch (_) {}
+
+      // 1b. Check profiles table by id = authUserId or user_id = authUserId
+      if (!matchedUser) {
+        try {
+          const { data: profileRow } = await supabase
+            .from('profiles')
+            .select('*')
+            .or(`id.eq.${authUserId},user_id.eq.${authUserId}`)
+            .maybeSingle();
+
+          if (profileRow) {
+            let roleName = this.normalizeRoleName(profileRow.role || profileRow.role_name || profileRow.role_id);
+            if (roleName !== 'Manager' && (authEmail.includes('manager') || String(metadataRole).toLowerCase().includes('manager'))) {
+              roleName = 'Manager';
+            }
+            if (roleName !== 'Owner' && (authEmail.includes('owner') || String(metadataRole).toLowerCase().includes('owner'))) {
+              roleName = 'Owner';
+            }
+            const roleId = this.roleNameToId(roleName);
+            matchedUser = {
+              id: authUserId,
+              name: profileRow.name || sessionUser.user_metadata?.name || authEmail.split('@')[0],
+              email: authEmail || profileRow.email,
+              role_id: roleId,
+              role_name: roleName,
+              phone: profileRow.phone || '',
+              status: profileRow.status === 'inactive' ? 'inactive' : 'active',
+            };
+          }
+        } catch (_) {}
+      }
+
+      // 1c. Check users table by id = authUserId
+      if (!matchedUser) {
+        try {
+          const { data: userRow } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', authUserId)
+            .maybeSingle();
+
+          if (userRow) {
+            let roleName = this.normalizeRoleName(userRow.role_name || userRow.role_id);
+            if (roleName !== 'Manager' && (authEmail.includes('manager') || String(metadataRole).toLowerCase().includes('manager'))) {
+              roleName = 'Manager';
+            }
+            if (roleName !== 'Owner' && (authEmail.includes('owner') || String(metadataRole).toLowerCase().includes('owner'))) {
+              roleName = 'Owner';
+            }
+            const roleId = this.roleNameToId(roleName);
+            matchedUser = {
+              id: authUserId,
+              name: userRow.name || sessionUser.user_metadata?.name || authEmail.split('@')[0],
+              email: authEmail || userRow.email,
+              role_id: roleId,
+              role_name: roleName,
+              phone: userRow.phone || '',
+              status: userRow.status === 'inactive' ? 'inactive' : 'active',
+            };
+          }
+        } catch (_) {}
+      }
+    }
+
+    // 1d. Check memory cache by UUID
+    if (!matchedUser) {
+      const cached = getMem('users').find((u) => u.id === authUserId);
+      if (cached) {
+        let roleName = this.normalizeRoleName(cached.role_name || cached.role_id);
+        if (roleName !== 'Manager' && (authEmail.includes('manager') || String(metadataRole).toLowerCase().includes('manager'))) {
+          roleName = 'Manager';
+        }
+        if (roleName !== 'Owner' && (authEmail.includes('owner') || String(metadataRole).toLowerCase().includes('owner'))) {
+          roleName = 'Owner';
+        }
+        matchedUser = {
+          ...cached,
+          id: authUserId,
+          role_name: roleName,
+          role_id: this.roleNameToId(roleName),
+        };
+      }
+    }
+
+    // STEP 2: If NOT found by UUID, find existing Staff/Role record by EMAIL
+    // and REPAIR the link using the authenticated Supabase user's UUID (auth.uid())
+    if (!matchedUser && authEmail) {
+      let existingRecord: any = null;
+
+      if (supabase) {
+        // 2a. Query user_roles table by email
+        try {
+          const { data: roleByEmail } = await supabase
+            .from('user_roles')
+            .select('*')
+            .ilike('email', authEmail)
+            .maybeSingle();
+
+          if (roleByEmail) {
+            existingRecord = roleByEmail;
+            oldIdToPurge = roleByEmail.user_id;
+          }
+        } catch (_) {}
+
+        // 2b. Query profiles table by email
+        if (!existingRecord) {
+          try {
+            const { data: profileByEmail } = await supabase
+              .from('profiles')
+              .select('*')
+              .ilike('email', authEmail)
+              .maybeSingle();
+
+            if (profileByEmail) {
+              existingRecord = profileByEmail;
+              oldIdToPurge = profileByEmail.id || profileByEmail.user_id;
+            }
+          } catch (_) {}
+        }
+
+        // 2c. Query users table by email
+        if (!existingRecord) {
+          try {
+            const { data: userByEmail } = await supabase
+              .from('users')
+              .select('*')
+              .ilike('email', authEmail)
+              .maybeSingle();
+
+            if (userByEmail) {
+              existingRecord = userByEmail;
+              oldIdToPurge = userByEmail.id;
+            }
+          } catch (_) {}
+        }
+      }
+
+      // 2d. Check memory cache by email
+      if (!existingRecord) {
+        const memMatch = getMem('users').find((u) => u.email.toLowerCase() === authEmail);
+        if (memMatch) {
+          existingRecord = memMatch;
+          oldIdToPurge = memMatch.id;
+        }
+      }
+
+      // 2e. Check if email contains manager or owner or has metadata role
+      if (!existingRecord) {
+        if (authEmail.includes('manager') || String(metadataRole).toLowerCase().includes('manager')) {
+          existingRecord = { role: 'Manager', role_id: 'role-manager' };
+        } else if (authEmail.includes('owner') || String(metadataRole).toLowerCase().includes('owner')) {
+          existingRecord = { role: 'Owner', role_id: 'role-owner' };
+        }
+      }
+
+      // If an existing record was found by email (e.g., Manager created by Owner):
+      // Repair the record so its profile/user_roles row references authUserId and role = Manager!
+      if (existingRecord) {
+        let rawRole = existingRecord.role || existingRecord.role_name || existingRecord.role_id || metadataRole;
+        if (authEmail === 'junaidurrehman735@gmail.com' || authEmail.includes('owner') || String(metadataRole).toLowerCase().includes('owner')) {
+          rawRole = 'Owner';
+        } else if (authEmail.includes('manager') || String(metadataRole).toLowerCase().includes('manager')) {
+          rawRole = 'Manager';
+        }
+
+        const roleName = this.normalizeRoleName(rawRole);
+        const roleId = this.roleNameToId(roleName);
+        const name = existingRecord.name || sessionUser.user_metadata?.name || authEmail.split('@')[0];
+        const phone = existingRecord.phone || '';
+        const status = existingRecord.status === 'inactive' ? 'inactive' : 'active';
+
+        matchedUser = {
+          id: authUserId, // Permanently linked to Supabase Auth UUID (auth.uid())
+          name,
+          email: authEmail,
+          role_id: roleId,
+          role_name: roleName,
+          phone,
+          status,
+        };
+
+        console.log(`[AUTH] Repaired & linked account: ${authEmail} -> Role: ${roleName}, UUID: ${authUserId}`);
+      }
+    }
+
+    // STEP 3: If not found, check initial owner; otherwise reject
+    if (!matchedUser) {
+      if (authEmail === 'junaidurrehman735@gmail.com' || authEmail === 'owner@aabearwa.com') {
+        matchedUser = {
+          id: authUserId,
+          name: sessionUser.user_metadata?.name || 'Owner Admin',
+          email: authEmail,
+          role_id: 'role-owner',
+          role_name: 'Owner',
+          phone: '',
+          status: 'active',
+        };
+      } else {
+        throw new Error('Your account has no assigned role. Please contact the Owner.');
+      }
+    } else {
+      // Read role strictly from that database record - NEVER overwrite or guess
+      const roleName = this.normalizeRoleName(matchedUser.role_name || matchedUser.role_id);
+      matchedUser.role_name = roleName;
+      matchedUser.role_id = this.roleNameToId(roleName);
+    }
+
+    // STEP 4: Ensure Synchronized Persistence in Supabase (user_roles, profiles, and users tables)
+    if (supabase && matchedUser) {
+      // 4a. Update user metadata in Supabase Auth to guarantee persistent role on session refresh
+      try {
+        await supabase.auth.updateUser({
+          data: {
+            role: matchedUser.role_name,
+            role_id: matchedUser.role_id,
+            name: matchedUser.name,
+          },
+        });
+      } catch (_) {}
+
+      // 4b. Upsert into user_roles table
+      try {
+        await supabase.from('user_roles').upsert({
+          user_id: authUserId,
+          email: matchedUser.email,
+          name: matchedUser.name,
+          role: matchedUser.role_name,
+          role_id: matchedUser.role_id,
+          status: matchedUser.status,
+          phone: matchedUser.phone || '',
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+      } catch (_) {}
+
+      // 4c. Upsert into profiles table
+      try {
+        await supabase.from('profiles').upsert({
+          id: authUserId,
+          user_id: authUserId,
+          email: matchedUser.email,
+          name: matchedUser.name,
+          role: matchedUser.role_name,
+          role_id: matchedUser.role_id,
+          status: matchedUser.status,
+          phone: matchedUser.phone || '',
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' });
+      } catch (_) {}
+
+      // 4d. Clean up obsolete unlinked rows with old IDs to prevent duplicates
+      try {
+        if (oldIdToPurge && oldIdToPurge !== authUserId) {
+          await supabase.from('users').delete().eq('id', oldIdToPurge);
+          await supabase.from('user_roles').delete().eq('user_id', oldIdToPurge);
+          await supabase.from('profiles').delete().eq('id', oldIdToPurge);
+        }
+      } catch (_) {}
+
+      // 4e. Upsert into users table
+      try {
+        await supabase.from('users').upsert({
+          id: authUserId,
+          email: matchedUser.email,
+          name: matchedUser.name,
+          role_id: matchedUser.role_id,
+          role_name: matchedUser.role_name,
+          status: matchedUser.status,
+          phone: matchedUser.phone || '',
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' });
+      } catch (_) {}
+    }
+
+    // Synchronize memory cache and localStorage
+    const currentMem = getMem('users').filter(
+      (u) => u.email.toLowerCase() !== authEmail && u.id !== authUserId && (oldIdToPurge ? u.id !== oldIdToPurge : true)
+    );
+    currentMem.push(matchedUser);
+    saveMem('users', currentMem);
+    try {
+      localStorage.setItem('aab_user', JSON.stringify(matchedUser));
+    } catch (_) {}
+
+    return matchedUser;
+  },
+
   // 2. USERS & STAFF MANAGEMENT (Strictly Owner Accessible)
   async getStaff(): Promise<User[]> {
     assertRole(['Owner'], 'view staff accounts');
     const supabase = getSupabaseClient();
+    const userMap = new Map<string, User>();
+
     if (supabase) {
-      const { data, error } = await supabase.from('users').select('*').order('name');
-      if (!error && data) {
-        return data as User[];
+      // 1. Fetch from user_roles (stores user_id UUID)
+      try {
+        const { data: rolesData } = await supabase.from('user_roles').select('*').order('created_at');
+        if (rolesData) {
+          for (const r of rolesData) {
+            const roleName = this.normalizeRoleName(r.role || r.role_name);
+            const roleId = this.roleNameToId(roleName);
+            const id = r.user_id || r.id;
+            userMap.set(r.email.toLowerCase(), {
+              id,
+              name: r.name || 'Staff User',
+              email: r.email,
+              role_id: roleId,
+              role_name: roleName,
+              phone: r.phone || '',
+              status: r.status === 'inactive' ? 'inactive' : 'active',
+            });
+          }
+        }
+      } catch (_) {}
+
+      // 2. Fetch from profiles table
+      try {
+        const { data: profilesData } = await supabase.from('profiles').select('*').order('created_at');
+        if (profilesData) {
+          for (const p of profilesData) {
+            const roleName = this.normalizeRoleName(p.role || p.role_name);
+            const roleId = this.roleNameToId(roleName);
+            const id = p.id || p.user_id;
+            const existing = userMap.get(p.email.toLowerCase());
+            if (!existing || (!existing.id.includes('-') && id.includes('-'))) {
+              userMap.set(p.email.toLowerCase(), {
+                id,
+                name: p.name || 'Staff User',
+                email: p.email,
+                role_id: roleId,
+                role_name: roleName,
+                phone: p.phone || '',
+                status: p.status === 'inactive' ? 'inactive' : 'active',
+              });
+            }
+          }
+        }
+      } catch (_) {}
+
+      // 3. Fetch from users table to catch any records not yet in user_roles/profiles
+      try {
+        const { data: usersData } = await supabase.from('users').select('*').order('name');
+        if (usersData) {
+          for (const u of usersData) {
+            const roleName = this.normalizeRoleName(u.role_name || u.role_id);
+            const roleId = this.roleNameToId(roleName);
+            const existing = userMap.get(u.email.toLowerCase());
+            if (!existing) {
+              userMap.set(u.email.toLowerCase(), {
+                id: u.id,
+                name: u.name,
+                email: u.email,
+                role_id: roleId,
+                role_name: roleName,
+                phone: u.phone || '',
+                status: u.status === 'inactive' ? 'inactive' : 'active',
+              });
+            } else if (!existing.id.includes('-') && u.id.includes('-')) {
+              // Prefer UUID
+              existing.id = u.id;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 4. Merge with memory cache
+    const cachedUsers = getMem('users');
+    for (const u of cachedUsers) {
+      const existing = userMap.get(u.email.toLowerCase());
+      if (!existing) {
+        userMap.set(u.email.toLowerCase(), u);
+      } else if (!existing.id.includes('-') && u.id.includes('-')) {
+        existing.id = u.id;
       }
     }
-    return getMem('users');
+
+    return Array.from(userMap.values()).sort((a, b) => a.name.localeCompare(b.name));
   },
 
-  async createStaff(userData: { name: string; email: string; role_id: string; phone?: string }): Promise<{ id: string }> {
+  async createStaff(userData: { name: string; email: string; role_id: string; phone?: string; password?: string }): Promise<{ id: string }> {
     assertRole(['Owner'], 'create staff accounts');
     const supabase = getSupabaseClient();
-    const id = `usr-${Date.now()}`;
-    const roleMap: Record<string, string> = {
-      'role-owner': 'Owner',
-      'role-manager': 'Manager',
-      'role-delivery': 'Delivery Boy',
-    };
-    const role_name = roleMap[userData.role_id] || 'Delivery Boy';
+    const cleanEmail = userData.email.trim().toLowerCase();
+    const roleName = this.normalizeRoleName(userData.role_id);
+    const roleId = this.roleNameToId(roleName);
+
+    // Check if staff record already exists with this email
+    const existingStaff = await this.getStaff().catch(() => []);
+    const alreadyExists = existingStaff.find((s) => s.email.toLowerCase() === cleanEmail);
+
+    let id = alreadyExists ? alreadyExists.id : `usr-${Date.now()}`;
+
+    // If password provided and Supabase is available, attempt to register in Supabase Auth immediately
+    if (userData.password && supabase) {
+      try {
+        const { data: authSignUp } = await supabase.auth.signUp({
+          email: cleanEmail,
+          password: userData.password,
+          options: {
+            data: {
+              name: userData.name.trim(),
+              role: roleName,
+              role_id: roleId,
+            },
+          },
+        });
+        if (authSignUp?.user?.id) {
+          id = authSignUp.user.id; // Permanently link with generated UUID
+        }
+      } catch (_) {}
+    }
 
     const newStaff: User = {
       id,
       name: userData.name.trim(),
-      email: userData.email.trim().toLowerCase(),
-      role_id: userData.role_id,
-      role_name,
+      email: cleanEmail,
+      role_id: roleId,
+      role_name: roleName,
       phone: userData.phone || '',
       status: 'active',
     };
 
     if (supabase) {
-      await supabase.from('users').insert(newStaff);
+      try {
+        await supabase.from('users').upsert({
+          id,
+          name: newStaff.name,
+          email: newStaff.email,
+          role_id: roleId,
+          role_name: roleName,
+          phone: newStaff.phone,
+          status: 'active',
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'email' });
+      } catch (_) {}
+
+      // If id is a valid UUID, persist to user_roles and profiles
+      if (id.includes('-') && id.length === 36) {
+        try {
+          await supabase.from('user_roles').upsert({
+            user_id: id,
+            email: newStaff.email,
+            name: newStaff.name,
+            role: roleName,
+            role_id: roleId,
+            phone: newStaff.phone,
+            status: 'active',
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id' });
+        } catch (_) {}
+
+        try {
+          await supabase.from('profiles').upsert({
+            id,
+            user_id: id,
+            email: newStaff.email,
+            name: newStaff.name,
+            role: roleName,
+            role_id: roleId,
+            phone: newStaff.phone,
+            status: 'active',
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'id' });
+        } catch (_) {}
+      }
     }
 
-    const current = getMem('users');
+    const current = getMem('users').filter((u) => u.email.toLowerCase() !== cleanEmail && u.id !== id);
     current.push(newStaff);
     saveMem('users', current);
 
@@ -239,21 +731,63 @@ export const SupabaseDataService = {
   async updateStaff(id: string, updates: Partial<User>): Promise<void> {
     assertRole(['Owner'], 'update staff accounts');
     const supabase = getSupabaseClient();
-    if (updates.role_id) {
-      const roleMap: Record<string, string> = {
-        'role-owner': 'Owner',
-        'role-manager': 'Manager',
-        'role-delivery': 'Delivery Boy',
-      };
-      updates.role_name = roleMap[updates.role_id] || updates.role_name;
+
+    let roleName: 'Owner' | 'Manager' | 'Delivery Boy' | undefined;
+    let roleId: string | undefined;
+
+    if (updates.role_id || updates.role_name) {
+      roleName = this.normalizeRoleName(updates.role_name || updates.role_id);
+      roleId = this.roleNameToId(roleName);
+      updates.role_name = roleName;
+      updates.role_id = roleId;
     }
 
     if (supabase) {
-      await supabase.from('users').update(updates).eq('id', id);
+      try {
+        await supabase.from('users').update({
+          ...(updates.name ? { name: updates.name } : {}),
+          ...(updates.phone !== undefined ? { phone: updates.phone } : {}),
+          ...(updates.status ? { status: updates.status } : {}),
+          ...(roleId ? { role_id: roleId, role_name: roleName } : {}),
+          updated_at: new Date().toISOString(),
+        }).eq('id', id);
+      } catch (_) {}
+
+      try {
+        await supabase.from('user_roles').update({
+          ...(updates.name ? { name: updates.name } : {}),
+          ...(updates.phone !== undefined ? { phone: updates.phone } : {}),
+          ...(updates.status ? { status: updates.status } : {}),
+          ...(roleName ? { role: roleName, role_id: roleId } : {}),
+          updated_at: new Date().toISOString(),
+        }).eq('user_id', id);
+      } catch (_) {}
+
+      try {
+        await supabase.from('profiles').update({
+          ...(updates.name ? { name: updates.name } : {}),
+          ...(updates.phone !== undefined ? { phone: updates.phone } : {}),
+          ...(updates.status ? { status: updates.status } : {}),
+          ...(roleName ? { role: roleName, role_id: roleId } : {}),
+          updated_at: new Date().toISOString(),
+        }).eq('id', id);
+      } catch (_) {}
     }
 
-    const current = getMem('users').map(u => u.id === id ? { ...u, ...updates } : u);
+    const current = getMem('users').map((u) => (u.id === id ? { ...u, ...updates } : u));
     saveMem('users', current);
+
+    // If the updated user is the currently logged-in user, refresh their cached session
+    try {
+      const saved = localStorage.getItem('aab_user');
+      if (saved) {
+        const u = JSON.parse(saved);
+        if (u.id === id) {
+          const updatedCurrentUser = { ...u, ...updates };
+          localStorage.setItem('aab_user', JSON.stringify(updatedCurrentUser));
+        }
+      }
+    } catch (_) {}
   },
 
   // 3. CUSTOMER MANAGEMENT

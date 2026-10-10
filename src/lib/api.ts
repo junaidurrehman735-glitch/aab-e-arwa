@@ -34,7 +34,7 @@ async function handleSupabaseRoute<T>(method: string, endpoint: string, body?: a
   const cleanPath = endpoint.split('?')[0].replace(/^\/api/, '');
   const pathParts = cleanPath.split('/').filter(Boolean);
 
-  // 1. AUTH & PROFILE
+  // 1. AUTH & PROFILE (PERMANENT SUPABASE AUTH.UID() LINKING)
   if (pathParts[0] === 'auth' && pathParts[1] === 'me') {
     const supabase = getSupabaseClient();
     let user: User | null = null;
@@ -42,28 +42,7 @@ async function handleSupabaseRoute<T>(method: string, endpoint: string, body?: a
     if (supabase) {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        // Query users table in Supabase
-        const { data: profile } = await supabase.from('users').select('*').eq('id', session.user.id).single();
-        if (profile) {
-          user = profile as User;
-        } else {
-          // If first login with Supabase user, auto-sync profile
-          const metaRole = session.user.user_metadata?.role || 'Owner';
-          const roleId = metaRole === 'Owner' ? 'role-owner' : metaRole === 'Manager' ? 'role-manager' : 'role-delivery';
-          const roleName = metaRole === 'Owner' ? 'Owner' : metaRole === 'Manager' ? 'Manager' : 'Delivery Boy';
-
-          const newProfile: User = {
-            id: session.user.id,
-            name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Staff Member',
-            email: session.user.email || '',
-            role_id: roleId,
-            role_name: roleName,
-            status: 'active',
-          };
-
-          await supabase.from('users').upsert(newProfile);
-          user = newProfile;
-        }
+        user = await SupabaseDataService.resolveAndLinkUser(session.user);
       }
     }
 
@@ -78,8 +57,24 @@ async function handleSupabaseRoute<T>(method: string, endpoint: string, body?: a
       throw new ApiError('Authentication required', 401);
     }
 
+    if (user.status === 'inactive') {
+      throw new ApiError('Your account has been deactivated. Please contact the business Owner.', 403);
+    }
+
     const permissions = await SupabaseDataService.getRolePermissions(user.role_id);
     return { user, permissions } as unknown as T;
+  }
+
+  if (pathParts[0] === 'auth' && pathParts[1] === 'change-password') {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      throw new ApiError('Supabase is not configured', 500);
+    }
+    const { error } = await supabase.auth.updateUser({ password: body.newPassword });
+    if (error) {
+      throw new ApiError(error.message, 400);
+    }
+    return { success: true } as unknown as T;
   }
 
   // 2. ROLES
@@ -286,20 +281,65 @@ async function handleSupabaseRoute<T>(method: string, endpoint: string, body?: a
 }
 
 // -----------------------------------------------------------------------------
-// Public Client API Gateway
+// Production Single Source of Truth API Client (Cross-Device Synchronized)
 // -----------------------------------------------------------------------------
+
+async function requestServer<T>(method: string, endpoint: string, body?: any): Promise<T> {
+  const token = getAuthToken();
+  const cleanPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = cleanPath.startsWith('/api') ? cleanPath : `/api${cleanPath}`;
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  // Pass active user ID header if cached in memory
+  try {
+    const saved = localStorage.getItem('aab_user');
+    if (saved) {
+      const u = JSON.parse(saved);
+      if (u.id) headers['x-user-id'] = u.id;
+    }
+  } catch (_) {}
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    if (!res.ok) {
+      const errorJson = await res.json().catch(() => ({ message: res.statusText }));
+      throw new ApiError(errorJson.message || `Request failed with status ${res.status}`, res.status, errorJson);
+    }
+
+    return (await res.json()) as T;
+  } catch (err: any) {
+    if (err instanceof ApiError) {
+      throw err;
+    }
+    // If server network error, try fallback handler
+    console.warn(`[API] Server request ${method} ${url} failed, attempting fallback:`, err.message);
+    return handleSupabaseRoute<T>(method, endpoint, body);
+  }
+}
 
 export const api = {
   get: async <T>(endpoint: string): Promise<T> => {
-    return handleSupabaseRoute<T>('GET', endpoint);
+    return requestServer<T>('GET', endpoint);
   },
   post: async <T>(endpoint: string, body?: any): Promise<T> => {
-    return handleSupabaseRoute<T>('POST', endpoint, body);
+    return requestServer<T>('POST', endpoint, body);
   },
   put: async <T>(endpoint: string, body?: any): Promise<T> => {
-    return handleSupabaseRoute<T>('PUT', endpoint, body);
+    return requestServer<T>('PUT', endpoint, body);
   },
   delete: async <T>(endpoint: string): Promise<T> => {
-    return handleSupabaseRoute<T>('DELETE', endpoint);
+    return requestServer<T>('DELETE', endpoint);
   },
 };

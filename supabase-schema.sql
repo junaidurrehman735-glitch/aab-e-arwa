@@ -45,14 +45,15 @@ CREATE TABLE IF NOT EXISTS public.permissions (
 );
 
 -- USER PROFILES TABLE (Linked with Supabase Auth auth.users)
-CREATE TABLE IF NOT EXISTS public.users (
-  id TEXT PRIMARY KEY, -- Maps to auth.users.id
-  name TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT NOT NULL UNIQUE,
-  role_id TEXT NOT NULL REFERENCES public.roles(id),
-  role_name TEXT NOT NULL DEFAULT 'Delivery Boy',
+  name TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('Owner', 'Manager', 'Delivery Boy')),
+  role_id TEXT NOT NULL DEFAULT 'role-delivery',
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
   phone TEXT,
-  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -66,6 +67,19 @@ CREATE TABLE IF NOT EXISTS public.user_roles (
   role_id TEXT NOT NULL DEFAULT 'role-delivery',
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
   phone TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- USER CATALOG TABLE (Maps auth.users.id UUID to profile records)
+CREATE TABLE IF NOT EXISTS public.users (
+  id TEXT PRIMARY KEY, -- Maps to auth.users.id UUID or pre-provisioned ID
+  name TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE,
+  role_id TEXT NOT NULL REFERENCES public.roles(id),
+  role_name TEXT NOT NULL DEFAULT 'Delivery Boy',
+  phone TEXT,
+  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -368,13 +382,23 @@ ON CONFLICT (key) DO NOTHING;
 -- 3. ROW LEVEL SECURITY (RLS) & HELPER FUNCTIONS
 -- ==============================================================================
 
--- Helper function to extract user's role from public.user_roles, public.users, or fallback
+-- Helper function to extract user's role from public.profiles, public.user_roles, public.users, or fallback
 CREATE OR REPLACE FUNCTION public.current_user_role()
 RETURNS TEXT AS $$
 DECLARE
   v_role TEXT;
 BEGIN
-  -- 1. Check public.user_roles table (linked by UUID)
+  -- 1. Check public.profiles table (linked by UUID)
+  SELECT role INTO v_role
+  FROM public.profiles
+  WHERE id = auth.uid() OR user_id = auth.uid()
+  LIMIT 1;
+
+  IF v_role IS NOT NULL THEN
+    RETURN v_role;
+  END IF;
+
+  -- 2. Check public.user_roles table (linked by UUID)
   SELECT role INTO v_role
   FROM public.user_roles
   WHERE user_id = auth.uid()
@@ -384,7 +408,7 @@ BEGIN
     RETURN v_role;
   END IF;
 
-  -- 2. Fallback to public.users table
+  -- 3. Fallback to public.users table
   SELECT role_name INTO v_role
   FROM public.users
   WHERE id = auth.uid()::text
@@ -394,11 +418,33 @@ BEGIN
     RETURN v_role;
   END IF;
 
+  -- 4. Check by verified email claim in JWT for initial role pairing
+  IF auth.jwt() ->> 'email' IS NOT NULL THEN
+    SELECT role INTO v_role
+    FROM public.user_roles
+    WHERE lower(email) = lower(auth.jwt() ->> 'email')
+    LIMIT 1;
+
+    IF v_role IS NOT NULL THEN
+      RETURN v_role;
+    END IF;
+
+    SELECT role INTO v_role
+    FROM public.profiles
+    WHERE lower(email) = lower(auth.jwt() ->> 'email')
+    LIMIT 1;
+
+    IF v_role IS NOT NULL THEN
+      RETURN v_role;
+    END IF;
+  END IF;
+
   RETURN 'Delivery Boy';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Enable RLS on all tables
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;
@@ -425,15 +471,33 @@ ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 
 -- ------------------------------------------------------------------------------
 -- RLS POLICIES FOR USERS / STAFF MANAGEMENT & ROLES
--- Owner: full access. Manager/Delivery Boy: view only their own profile.
+-- Owner: full access. Manager/Delivery Boy: view and link their own profile/role.
 -- ------------------------------------------------------------------------------
+CREATE POLICY "owner_full_profiles_access" ON public.profiles
+  FOR ALL TO authenticated
+  USING (public.current_user_role() = 'Owner');
+
+CREATE POLICY "user_view_own_profile_record" ON public.profiles
+  FOR SELECT TO authenticated
+  USING (id = auth.uid() OR user_id = auth.uid() OR lower(email) = lower(auth.jwt() ->> 'email'));
+
+CREATE POLICY "user_update_own_profile_record" ON public.profiles
+  FOR UPDATE TO authenticated
+  USING (id = auth.uid() OR user_id = auth.uid() OR lower(email) = lower(auth.jwt() ->> 'email'))
+  WITH CHECK (id = auth.uid() OR user_id = auth.uid());
+
 CREATE POLICY "owner_full_user_roles_access" ON public.user_roles
   FOR ALL TO authenticated
   USING (public.current_user_role() = 'Owner');
 
 CREATE POLICY "user_view_own_role" ON public.user_roles
   FOR SELECT TO authenticated
-  USING (user_id = auth.uid());
+  USING (user_id = auth.uid() OR lower(email) = lower(auth.jwt() ->> 'email'));
+
+CREATE POLICY "user_update_own_role" ON public.user_roles
+  FOR UPDATE TO authenticated
+  USING (user_id = auth.uid() OR lower(email) = lower(auth.jwt() ->> 'email'))
+  WITH CHECK (user_id = auth.uid());
 
 CREATE POLICY "owner_full_users_access" ON public.users
   FOR ALL TO authenticated
@@ -441,7 +505,11 @@ CREATE POLICY "owner_full_users_access" ON public.users
 
 CREATE POLICY "user_view_own_profile" ON public.users
   FOR SELECT TO authenticated
-  USING (id = auth.uid()::text);
+  USING (id = auth.uid()::text OR lower(email) = lower(auth.jwt() ->> 'email'));
+
+CREATE POLICY "user_update_own_profile" ON public.users
+  FOR UPDATE TO authenticated
+  USING (id = auth.uid()::text OR lower(email) = lower(auth.jwt() ->> 'email'));
 
 -- ------------------------------------------------------------------------------
 -- RLS POLICIES FOR ROLES & PERMISSIONS
@@ -583,3 +651,56 @@ CREATE POLICY "owner_manager_full_audit_logs" ON public.audit_logs
 
 CREATE POLICY "all_authenticated_insert_audit_logs" ON public.audit_logs
   FOR INSERT TO authenticated WITH CHECK (true);
+
+-- ==============================================================================
+-- 4. POSTGREST SCHEMA ACCESS & PERMISSIONS (ENABLE CLIENT ACCESS ACROSS DEVICES)
+-- ==============================================================================
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated;
+
+-- ==============================================================================
+-- 5. OWNER INITIAL ACCOUNT SEEDING & ROLE RESTORATION
+-- ==============================================================================
+-- Automatically map the primary owner account (junaidurrehman735@gmail.com)
+-- and any pre-existing owner accounts to the Owner role across all profile tables.
+DO $$
+DECLARE
+  v_owner_uid UUID;
+BEGIN
+  SELECT id INTO v_owner_uid FROM auth.users WHERE lower(email) = 'junaidurrehman735@gmail.com' LIMIT 1;
+  IF v_owner_uid IS NOT NULL THEN
+    INSERT INTO public.user_roles (user_id, email, name, role, role_id, status)
+    VALUES (v_owner_uid, 'junaidurrehman735@gmail.com', 'Owner Admin', 'Owner', 'role-owner', 'active')
+    ON CONFLICT (email) DO UPDATE SET
+      user_id = v_owner_uid,
+      role = 'Owner',
+      role_id = 'role-owner',
+      status = 'active',
+      updated_at = now();
+
+    INSERT INTO public.profiles (id, user_id, email, name, role, role_id, status)
+    VALUES (v_owner_uid, v_owner_uid, 'junaidurrehman735@gmail.com', 'Owner Admin', 'Owner', 'role-owner', 'active')
+    ON CONFLICT (email) DO UPDATE SET
+      id = v_owner_uid,
+      user_id = v_owner_uid,
+      role = 'Owner',
+      role_id = 'role-owner',
+      status = 'active',
+      updated_at = now();
+
+    INSERT INTO public.users (id, name, email, role_id, role_name, status)
+    VALUES (v_owner_uid::text, 'Owner Admin', 'junaidurrehman735@gmail.com', 'role-owner', 'Owner', 'active')
+    ON CONFLICT (email) DO UPDATE SET
+      id = v_owner_uid::text,
+      role_id = 'role-owner',
+      role_name = 'Owner',
+      status = 'active',
+      updated_at = now();
+  END IF;
+END $$;
+

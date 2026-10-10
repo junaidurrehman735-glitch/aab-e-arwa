@@ -51,6 +51,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshUser = useCallback(async () => {
     try {
+      if (supabase) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const res = await api.post<{ user: User; permissions: Permission[] }>('/auth/resolve', {
+            user: session.user,
+          });
+          setUser(res.user);
+          setPermissions(res.permissions);
+          localStorage.setItem('aab_user', JSON.stringify(res.user));
+          localStorage.setItem('aab_perms', JSON.stringify(res.permissions));
+          return;
+        }
+      }
+
       const res = await api.get<{ user: User; permissions: Permission[] }>('/auth/me');
       setUser(res.user);
       setPermissions(res.permissions);
@@ -61,7 +75,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setIsLoading(false);
     }
-  }, [logout]);
+  }, [supabase, logout]);
 
   useEffect(() => {
     let mounted = true;
@@ -153,16 +167,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       setAuthToken(data.session.access_token);
+      localStorage.removeItem('aab_user');
 
-      // Fetch user profile and permissions from backend
-      const res = await api.get<{ user: User; permissions: Permission[] }>('/auth/me');
+      // Fetch and link user profile and permissions by Supabase Auth UUID (auth.uid())
+      const res = await api.post<{ user: User; permissions: Permission[] }>('/auth/resolve', {
+        user: data.session.user,
+      });
       setUser(res.user);
       setPermissions(res.permissions);
       localStorage.setItem('aab_user', JSON.stringify(res.user));
       localStorage.setItem('aab_perms', JSON.stringify(res.permissions));
-      toast.success(`Welcome back, ${res.user.name}`);
+      toast.success(`Welcome back, ${res.user.name} (${res.user.role_name})`);
       return true;
     } catch (err: any) {
+      if (supabase) {
+        await supabase.auth.signOut().catch(() => {});
+      }
+      setAuthToken(null);
+      localStorage.removeItem('aab_user');
+      localStorage.removeItem('aab_perms');
       toast.error(err.message || 'Login failed');
       return false;
     } finally {

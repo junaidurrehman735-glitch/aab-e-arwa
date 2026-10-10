@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { apiRouter } from './src/server/apiRouter.ts';
 
 dotenv.config();
 
@@ -22,6 +23,9 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Mount Central Production API Router (Cross-device Single Source of Truth)
+app.use('/api', apiRouter);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

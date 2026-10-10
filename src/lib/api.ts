@@ -35,6 +35,16 @@ async function handleSupabaseRoute<T>(method: string, endpoint: string, body?: a
   const pathParts = cleanPath.split('/').filter(Boolean);
 
   // 1. AUTH & PROFILE (PERMANENT SUPABASE AUTH.UID() LINKING)
+  if (pathParts[0] === 'auth' && pathParts[1] === 'resolve') {
+    const sessionUser = body?.user;
+    if (!sessionUser) {
+      throw new ApiError('Session user object with UUID required', 400);
+    }
+    const user = await SupabaseDataService.resolveAndLinkUser(sessionUser);
+    const permissions = await SupabaseDataService.getRolePermissions(user.role_id);
+    return { user, permissions } as unknown as T;
+  }
+
   if (pathParts[0] === 'auth' && pathParts[1] === 'me') {
     const supabase = getSupabaseClient();
     let user: User | null = null;
@@ -314,6 +324,11 @@ async function requestServer<T>(method: string, endpoint: string, body?: any): P
     });
 
     if (!res.ok) {
+      // If 405 Method Not Allowed or 404 Not Found returned by static router on serverless, fallback seamlessly:
+      if (res.status === 405 || res.status === 404) {
+        console.warn(`[API] Server returned HTTP ${res.status} for ${method} ${url}, executing direct Supabase fallback:`, endpoint);
+        return handleSupabaseRoute<T>(method, endpoint, body);
+      }
       const errorJson = await res.json().catch(() => ({ message: res.statusText }));
       throw new ApiError(errorJson.message || `Request failed with status ${res.status}`, res.status, errorJson);
     }

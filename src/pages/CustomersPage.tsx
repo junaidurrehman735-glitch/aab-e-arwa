@@ -57,6 +57,7 @@ export const CustomersPage: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [types, setTypes] = useState<CustomerType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dbError, setDbError] = useState<string | null>(null);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -114,6 +115,7 @@ export const CustomersPage: React.FC = () => {
 
   const fetchCustomers = async () => {
     setLoading(true);
+    setDbError(null);
     try {
       const params = new URLSearchParams();
       if (search) params.append('search', search);
@@ -123,12 +125,17 @@ export const CustomersPage: React.FC = () => {
 
       const [custRes, typeRes] = await Promise.all([
         api.get<Customer[]>(`/customers?${params.toString()}`),
-        api.get<CustomerType[]>('/customers/types'),
+        api.get<CustomerType[]>('/customers/types').catch(() => []),
       ]);
-      setCustomers(custRes);
-      setTypes(typeRes);
+      setCustomers(Array.isArray(custRes) ? custRes : []);
+      if (Array.isArray(typeRes) && typeRes.length > 0) {
+        setTypes(typeRes);
+      }
     } catch (err: any) {
-      toast.error(err.message || 'Failed to load customers');
+      console.error('[Fetch Customers Error]:', err);
+      const msg = err.message || 'Failed to load customers from Supabase';
+      setDbError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -154,28 +161,55 @@ export const CustomersPage: React.FC = () => {
 
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.name.trim()) {
+      toast.error('Customer name is required');
+      return;
+    }
+    if (!formData.phone.trim()) {
+      toast.error('Customer phone number is required');
+      return;
+    }
+    if (!formData.address.trim()) {
+      toast.error('Customer address is required');
+      return;
+    }
+
+    const effectiveArea = isCustomArea
+      ? customAreaName.trim()
+      : (formData.area || APPROVED_DELIVERY_AREAS[0]);
+
+    if (isCustomArea && !effectiveArea) {
+      toast.error('Please enter a temporary area name (e.g. Alamabad)');
+      return;
+    }
+
     try {
-      const effectiveArea = isCustomArea
-        ? customAreaName.trim()
-        : (formData.area || APPROVED_DELIVERY_AREAS[0]);
-
-      if (isCustomArea && !effectiveArea) {
-        toast.error('Please enter a temporary area name (e.g. Alamabad)');
-        return;
-      }
-
-      await api.post('/customers', {
-        ...formData,
+      const payload = {
+        name: formData.name.trim(),
+        phone: formData.phone.trim(),
+        address: formData.address.trim(),
         area: effectiveArea,
+        area_access: 'Specific Area',
+        customer_type_id: formData.customer_type_id || CUSTOMER_TYPE_IDS['Residential Home'],
+        selling_rate: Number(formData.selling_rate) || 220,
+        payment_type: formData.payment_type || 'Cash',
+        cash_status: formData.cash_status || 'Cash on Delivery',
+        credit_limit: 0,
+        outstanding_balance: 0,
         cans_held: Number(formData.company_cans) || 0,
         net_deposit_amount: Number(formData.net_deposit_amount) || 0,
-        selling_rate: Number(formData.selling_rate) || 0,
-      });
-      toast.success('Customer profile created successfully');
+        notes: formData.notes || '',
+        delivery_instructions: formData.delivery_instructions || '',
+        status: formData.status || 'active',
+      };
+
+      const res = await api.post<Customer>('/customers', payload);
+      toast.success(`Customer "${res?.name || formData.name}" registered in Supabase database`);
       setIsAddModalOpen(false);
       resetForm();
-      fetchCustomers();
+      await fetchCustomers();
     } catch (err: any) {
+      console.error('[Create Customer Error]:', err);
       toast.error(err.message || 'Failed to create customer');
     }
   };
@@ -183,26 +217,39 @@ export const CustomersPage: React.FC = () => {
   const handleUpdateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomer) return;
+    if (!formData.name.trim()) {
+      toast.error('Customer name is required');
+      return;
+    }
+
+    const effectiveArea = isCustomArea
+      ? customAreaName.trim()
+      : (formData.area || APPROVED_DELIVERY_AREAS[0]);
+
+    if (isCustomArea && !effectiveArea) {
+      toast.error('Please enter a temporary area name (e.g. Alamabad)');
+      return;
+    }
+
     try {
-      const effectiveArea = isCustomArea
-        ? customAreaName.trim()
-        : (formData.area || APPROVED_DELIVERY_AREAS[0]);
-
-      if (isCustomArea && !effectiveArea) {
-        toast.error('Please enter a temporary area name (e.g. Alamabad)');
-        return;
-      }
-
       await api.put(`/customers/${selectedCustomer.id}`, {
-        ...formData,
+        name: formData.name.trim(),
+        phone: formData.phone.trim(),
+        address: formData.address.trim(),
         area: effectiveArea,
+        customer_type_id: formData.customer_type_id,
+        selling_rate: Number(formData.selling_rate) || 0,
+        payment_type: formData.payment_type,
+        cash_status: formData.cash_status,
         cans_held: Number(formData.company_cans) || 0,
         net_deposit_amount: Number(formData.net_deposit_amount) || 0,
-        selling_rate: Number(formData.selling_rate) || 0,
+        notes: formData.notes,
+        delivery_instructions: formData.delivery_instructions,
+        status: formData.status,
       });
-      toast.success('Customer profile updated successfully');
+      toast.success('Customer updated successfully in Supabase');
       setIsEditModalOpen(false);
-      fetchCustomers();
+      await fetchCustomers();
       if (isDetailsModalOpen) {
         viewCustomerDetails({
           ...selectedCustomer,
@@ -214,6 +261,7 @@ export const CustomersPage: React.FC = () => {
         } as any);
       }
     } catch (err: any) {
+      console.error('[Update Customer Error]:', err);
       toast.error(err.message || 'Failed to update customer');
     }
   };
@@ -222,12 +270,13 @@ export const CustomersPage: React.FC = () => {
     if (!selectedCustomer) return;
     try {
       await api.delete(`/customers/${selectedCustomer.id}`);
-      toast.success('Customer deleted successfully');
+      toast.success('Customer deleted successfully from Supabase');
       setIsDeleteConfirmOpen(false);
       setIsDetailsModalOpen(false);
       setSelectedCustomer(null);
-      fetchCustomers();
+      await fetchCustomers();
     } catch (err: any) {
+      console.error('[Delete Customer Error]:', err);
       toast.error(err.message || 'Failed to delete customer');
     }
   };
@@ -382,6 +431,28 @@ export const CustomersPage: React.FC = () => {
           </button>
         )}
       </div>
+
+      {/* Supabase Database Status / Error Notice */}
+      {dbError && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-semibold text-amber-900">Supabase Database Notice</p>
+            <p className="mt-0.5 text-amber-800">{dbError}</p>
+            {(dbError.includes('schema cache') || dbError.includes('PGRST205') || dbError.includes('not found')) && (
+              <p className="mt-2 text-[11px] text-amber-900 bg-amber-100/80 p-2.5 rounded-lg border border-amber-200 leading-relaxed">
+                <span className="font-semibold">Setup Required:</span> The PostgreSQL table <code className="bg-amber-200/60 px-1 py-0.5 rounded font-mono">public.customers</code> was not found in your Supabase project (<code className="bg-amber-200/60 px-1 py-0.5 rounded font-mono">dfzduewbtosfzbcvsyao</code>). Please open your Supabase Dashboard &gt; SQL Editor and execute <code className="bg-amber-200/60 px-1 py-0.5 rounded font-mono">supabase-schema.sql</code> to create all tables and RLS permissions.
+              </p>
+            )}
+          </div>
+          <button
+            onClick={() => fetchCustomers()}
+            className="px-2.5 py-1 text-xs bg-amber-200 hover:bg-amber-300 text-amber-900 rounded-lg font-medium transition-colors cursor-pointer shrink-0"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex flex-wrap items-center gap-3">

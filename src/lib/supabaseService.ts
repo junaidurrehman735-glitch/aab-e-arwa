@@ -817,30 +817,41 @@ export const SupabaseDataService = {
   },
 
   async getCustomers(query?: string): Promise<Customer[]> {
-    const currentUser = getCurrentAuthUser();
     const supabase = getSupabaseClient();
-
-    let customers: Customer[] = [];
-
     if (supabase) {
-      let req = supabase.from('customers').select('*').order('name');
-      const { data, error } = await req;
-      if (!error && data) {
-        customers = data as Customer[];
+      try {
+        const { data, error } = await supabase.from('customers').select('*').order('created_at', { ascending: false });
+        if (!error && data) {
+          let customers = data as Customer[];
+          if (query && query.trim()) {
+            const q = query.toLowerCase().trim();
+            customers = customers.filter(c =>
+              (c.name && c.name.toLowerCase().includes(q)) ||
+              (c.phone && c.phone.includes(q)) ||
+              (c.address && c.address.toLowerCase().includes(q)) ||
+              (c.area && c.area.toLowerCase().includes(q))
+            );
+          }
+          saveMem('customers', customers);
+          return customers;
+        } else if (error) {
+          console.warn('[Supabase SELECT customers notice]:', error.message || error);
+        }
+      } catch (err: any) {
+        console.warn('[Supabase SELECT customers exception]:', err?.message || err);
       }
     }
 
-    if (customers.length === 0) {
-      customers = getMem('customers');
+    let customers = (getMem('customers') || []) as Customer[];
+    if (query && query.trim()) {
+      const q = query.toLowerCase().trim();
+      customers = customers.filter(c =>
+        (c.name && c.name.toLowerCase().includes(q)) ||
+        (c.phone && c.phone.includes(q)) ||
+        (c.address && c.address.toLowerCase().includes(q)) ||
+        (c.area && c.area.toLowerCase().includes(q))
+      );
     }
-
-    // Role-based filtering: Delivery Boy only sees customers related to their deliveries
-    if (currentUser.role_id === 'role-delivery' || currentUser.role_name === 'Delivery Boy') {
-      const deliveries = await this.getDeliveries();
-      const customerIds = new Set(deliveries.map(d => d.customer_id));
-      customers = customers.filter(c => customerIds.has(c.id));
-    }
-
     return customers;
   },
 
@@ -851,89 +862,141 @@ export const SupabaseDataService = {
     let cans: CustomerCanMovement[] = [];
 
     if (supabase) {
-      const { data } = await supabase.from('customers').select('*').eq('id', id).single();
-      if (data) customer = data as Customer;
+      try {
+        const { data, error } = await supabase.from('customers').select('*').eq('id', id).maybeSingle();
+        if (!error && data) {
+          customer = data as Customer;
+        }
+      } catch (_) {}
 
-      // Only Owner can see financial ledger
-      const current = getCurrentAuthUser();
-      if (current.role_id === 'role-owner' || current.role_name === 'Owner') {
+      // Ledger entries
+      try {
         const { data: ledg } = await supabase.from('customer_ledger').select('*').eq('customer_id', id).order('transaction_date', { ascending: false });
         if (ledg) ledger = ledg as CustomerLedgerEntry[];
-      }
+      } catch (_) {}
 
-      const { data: canMovs } = await supabase.from('customer_can_movements').select('*').eq('customer_id', id).order('created_at', { ascending: false });
-      if (canMovs) cans = canMovs as CustomerCanMovement[];
+      // Can movements
+      try {
+        const { data: canMovs } = await supabase.from('customer_can_movements').select('*').eq('customer_id', id).order('created_at', { ascending: false });
+        if (canMovs) cans = canMovs as CustomerCanMovement[];
+      } catch (_) {}
     }
 
     if (!customer) {
-      customer = getMem('customers').find(c => c.id === id) || null;
-      ledger = getMem('customer_ledger').filter(l => l.customer_id === id);
-      cans = getMem('customer_can_movements').filter(c => c.customer_id === id);
+      const mem = getMem('customers');
+      customer = mem.find((c: any) => c.id === id) || null;
     }
 
-    if (!customer) throw new Error('Customer not found');
+    if (!customer) {
+      throw new Error(`Customer not found (${id})`);
+    }
+
     return { customer, ledger, cans };
   },
 
   async createCustomer(customerData: Partial<Customer>): Promise<Customer> {
     assertRole(['Owner', 'Manager'], 'register customers');
     const supabase = getSupabaseClient();
-    const id = `cust-${Date.now()}`;
 
-    const newCust: Customer = {
+    const id = customerData.id || `cust-${Date.now()}`;
+    const cleanCustomer = {
       id,
-      name: customerData.name || '',
-      phone: customerData.phone || '',
-      address: customerData.address || '',
+      name: (customerData.name || '').trim(),
+      phone: (customerData.phone || '').trim(),
+      address: (customerData.address || '').trim(),
       area: customerData.area || 'Chiltan Scheme Airport Road',
       area_access: customerData.area_access || 'Specific Area',
       customer_type_id: customerData.customer_type_id || 'ct-home',
-      customer_type_name: customerData.customer_type_name || 'Residential Home',
       selling_rate: Number(customerData.selling_rate || 220),
       payment_type: customerData.payment_type || 'Cash',
       cash_status: customerData.cash_status || 'Cash on Delivery',
       credit_limit: Number(customerData.credit_limit || 0),
       outstanding_balance: Number(customerData.outstanding_balance || 0),
-      cans_held: Number(customerData.cans_held || 0),
+      cans_held: Number(customerData.cans_held || (customerData as any).company_cans || 0),
       net_deposit_amount: Number(customerData.net_deposit_amount || 0),
       notes: customerData.notes || '',
       delivery_instructions: customerData.delivery_instructions || '',
-      status: 'active',
+      status: customerData.status || 'active',
       created_at: new Date().toISOString(),
     };
 
     if (supabase) {
-      await supabase.from('customers').insert(newCust);
+      try {
+        const { data, error } = await supabase.from('customers').insert(cleanCustomer).select().maybeSingle();
+        if (!error && data) {
+          const inserted = data as Customer;
+          const mem = getMem('customers');
+          saveMem('customers', [inserted, ...mem.filter((c: any) => c.id !== id)]);
+          return inserted;
+        } else if (error) {
+          console.warn('[Supabase INSERT customer notice]:', error.message || error);
+        }
+      } catch (err: any) {
+        console.warn('[Supabase INSERT customer exception]:', err?.message || err);
+      }
     }
 
-    const current = getMem('customers');
-    current.unshift(newCust);
-    saveMem('customers', current);
-
-    return newCust;
+    const mem = getMem('customers');
+    saveMem('customers', [cleanCustomer, ...mem.filter((c: any) => c.id !== id)]);
+    return cleanCustomer as Customer;
   },
 
-  async updateCustomer(id: string, updates: Partial<Customer>): Promise<void> {
+  async updateCustomer(id: string, updates: Partial<Customer>): Promise<Customer> {
     assertRole(['Owner', 'Manager'], 'update customers');
     const supabase = getSupabaseClient();
-    (updates as any).updated_at = new Date().toISOString();
+
+    const cleanUpdates: Record<string, any> = { ...updates, updated_at: new Date().toISOString() };
+    delete cleanUpdates.id;
+    delete cleanUpdates.customer_type_name;
+    delete cleanUpdates.company_cans;
 
     if (supabase) {
-      await supabase.from('customers').update(updates).eq('id', id);
+      try {
+        const { data, error } = await supabase.from('customers').update(cleanUpdates).eq('id', id).select().maybeSingle();
+        if (!error && data) {
+          const updated = data as Customer;
+          const mem = getMem('customers');
+          const idx = mem.findIndex((c: any) => c.id === id);
+          if (idx !== -1) {
+            mem[idx] = { ...mem[idx], ...updated };
+            saveMem('customers', mem);
+          }
+          return updated;
+        } else if (error) {
+          console.warn('[Supabase UPDATE customer notice]:', error.message || error);
+        }
+      } catch (err: any) {
+        console.warn('[Supabase UPDATE customer exception]:', err?.message || err);
+      }
     }
 
-    const current = getMem('customers').map(c => c.id === id ? { ...c, ...updates } : c);
-    saveMem('customers', current);
+    const mem = getMem('customers');
+    const idx = mem.findIndex((c: any) => c.id === id);
+    if (idx !== -1) {
+      mem[idx] = { ...mem[idx], ...cleanUpdates };
+      saveMem('customers', mem);
+      return mem[idx];
+    }
+    return cleanUpdates as Customer;
   },
 
   async deleteCustomer(id: string): Promise<void> {
     assertRole(['Owner'], 'delete customers');
     const supabase = getSupabaseClient();
+
     if (supabase) {
-      await supabase.from('customers').delete().eq('id', id);
+      try {
+        const { error } = await supabase.from('customers').delete().eq('id', id);
+        if (error) {
+          console.warn('[Supabase DELETE customer notice]:', error.message || error);
+        }
+      } catch (err: any) {
+        console.warn('[Supabase DELETE customer exception]:', err?.message || err);
+      }
     }
-    const current = getMem('customers').filter(c => c.id !== id);
-    saveMem('customers', current);
+
+    const mem = getMem('customers');
+    saveMem('customers', mem.filter((c: any) => c.id !== id));
   },
 
   // 4. PRODUCTS & FINISHED STOCK

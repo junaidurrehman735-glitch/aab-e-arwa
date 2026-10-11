@@ -383,21 +383,65 @@ apiRouter.put('/staff/:id', async (req: Request, res: Response) => {
 // 4. CUSTOMER MANAGEMENT (CROSS-DEVICE PERSISTENCE)
 // -----------------------------------------------------------------------------
 
-apiRouter.get('/customers/types', (req: Request, res: Response) => {
+apiRouter.get('/customers/types', async (req: Request, res: Response) => {
+  const supabase = getServerSupabase();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from('customer_types').select('*').order('name');
+      if (!error && data && data.length > 0) {
+        return res.json(data);
+      }
+    } catch (_) {}
+  }
   const db = loadDatabase();
   return res.json(db.customer_types);
 });
 
-apiRouter.get('/customers', (req: Request, res: Response) => {
-  const db = loadDatabase();
+apiRouter.get('/customers', async (req: Request, res: Response) => {
+  const supabase = getServerSupabase();
   const query = (req.query.search as string || '').toLowerCase().trim();
   const areaFilter = (req.query.area as string || '').trim();
+  const typeFilter = (req.query.type as string || '').trim();
+  const cashStatusFilter = (req.query.cashStatus as string || '').trim();
 
-  let customers = db.customers;
+  let customers: Customer[] = [];
+  let fetchedFromSupabase = false;
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        customers = data as Customer[];
+        fetchedFromSupabase = true;
+        // Keep local central database aligned
+        try {
+          const db = loadDatabase();
+          db.customers = customers;
+          saveDatabase(db);
+        } catch (_) {}
+      } else if (error) {
+        console.warn('[API /customers] Supabase SELECT notice (using central database):', error.message || error);
+      }
+    } catch (err: any) {
+      console.warn('[API /customers] Supabase SELECT notice:', err?.message || err);
+    }
+  }
+
+  if (!fetchedFromSupabase) {
+    const db = loadDatabase();
+    customers = db.customers || [];
+  }
+
+  // Apply filters to real fetched records
   if (query) {
     customers = customers.filter(c =>
-      c.name.toLowerCase().includes(query) ||
-      c.phone.includes(query) ||
+      (c.name && c.name.toLowerCase().includes(query)) ||
+      (c.phone && c.phone.includes(query)) ||
+      (c.address && c.address.toLowerCase().includes(query)) ||
       (c.area && c.area.toLowerCase().includes(query))
     );
   }
@@ -416,21 +460,41 @@ apiRouter.get('/customers', (req: Request, res: Response) => {
       customers = customers.filter(c => c.area === areaFilter);
     }
   }
+  if (typeFilter) {
+    customers = customers.filter(c => c.customer_type_id === typeFilter);
+  }
+  if (cashStatusFilter) {
+    customers = customers.filter(c => c.cash_status === cashStatusFilter);
+  }
 
   return res.json(customers);
 });
 
-apiRouter.get('/customers/:id', (req: Request, res: Response) => {
+apiRouter.get('/customers/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const supabase = getServerSupabase();
   const db = loadDatabase();
-  const customer = db.customers.find(c => c.id === id);
+
+  let customer: Customer | null = null;
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from('customers').select('*').eq('id', id).maybeSingle();
+      if (!error && data) {
+        customer = data as Customer;
+      }
+    } catch (_) {}
+  }
+
+  if (!customer) {
+    customer = db.customers.find(c => c.id === id) || null;
+  }
 
   if (!customer) {
     return res.status(404).json({ message: 'Customer not found' });
   }
 
-  const ledger = db.customer_ledger.filter(l => l.customer_id === id);
-  const cans = db.customer_can_movements.filter(c => c.customer_id === id);
+  const ledger = (db.customer_ledger || []).filter(l => l.customer_id === id);
+  const cans = (db.customer_can_movements || []).filter(c => c.customer_id === id);
 
   return res.json({ customer, ledger, cans });
 });
@@ -438,46 +502,70 @@ apiRouter.get('/customers/:id', (req: Request, res: Response) => {
 apiRouter.post('/customers', async (req: Request, res: Response) => {
   try {
     const customerData = req.body;
-    const db = loadDatabase();
-    const id = `cust-${Date.now()}`;
+    if (!customerData.name || !customerData.name.trim()) {
+      return res.status(400).json({ message: 'Customer name is required' });
+    }
+    if (!customerData.phone || !customerData.phone.trim()) {
+      return res.status(400).json({ message: 'Customer phone number is required' });
+    }
+    if (!customerData.address || !customerData.address.trim()) {
+      return res.status(400).json({ message: 'Customer address is required' });
+    }
 
-    const newCustomer: Customer = {
+    const id = customerData.id || `cust-${Date.now()}`;
+    const cleanCustomer: Record<string, any> = {
       id,
-      name: customerData.name || '',
-      phone: customerData.phone || '',
-      address: customerData.address || '',
+      name: customerData.name.trim(),
+      phone: customerData.phone.trim(),
+      address: customerData.address.trim(),
       area: customerData.area || 'Chiltan Scheme Airport Road',
       area_access: customerData.area_access || 'Specific Area',
       customer_type_id: customerData.customer_type_id || 'ct-home',
-      customer_type_name: customerData.customer_type_name || 'Residential Home',
       selling_rate: Number(customerData.selling_rate || 220),
       payment_type: customerData.payment_type || 'Cash',
       cash_status: customerData.cash_status || 'Cash on Delivery',
       credit_limit: Number(customerData.credit_limit || 0),
       outstanding_balance: Number(customerData.outstanding_balance || 0),
-      cans_held: Number(customerData.cans_held || 0),
+      cans_held: Number(customerData.cans_held || customerData.company_cans || 0),
       net_deposit_amount: Number(customerData.net_deposit_amount || 0),
       notes: customerData.notes || '',
       delivery_instructions: customerData.delivery_instructions || '',
-      status: 'active',
+      status: customerData.status || 'active',
       created_at: new Date().toISOString(),
     };
 
-    // 1. Save to persistent database
-    db.customers.unshift(newCustomer);
+    // 1. Always commit to server central database immediately (single source of truth)
+    const db = loadDatabase();
+    db.customers = db.customers.filter(c => c.id !== id);
+    db.customers.unshift(cleanCustomer as Customer);
     saveDatabase(db);
 
-    // 2. Sync to Supabase
+    // 2. Also sync to Supabase if configured
     const supabase = getServerSupabase();
     if (supabase) {
       try {
-        await supabase.from('customers').insert(newCustomer);
-      } catch (_) {}
+        const { data, error } = await supabase.from('customers').insert(cleanCustomer).select().maybeSingle();
+        if (error) {
+          console.warn('[API /customers] Supabase INSERT notice (saved in central DB):', error.message || error);
+        } else if (data) {
+          const inserted = data as Customer;
+          const idx = db.customers.findIndex(c => c.id === id);
+          if (idx !== -1) {
+            db.customers[idx] = inserted;
+            saveDatabase(db);
+          }
+          console.log(`[CUSTOMER] Created & verified in Supabase: ${inserted.name} (${inserted.id})`);
+          return res.status(201).json(inserted);
+        }
+      } catch (err: any) {
+        console.warn('[API /customers] Supabase INSERT exception:', err?.message || err);
+      }
     }
 
-    console.log(`[CUSTOMER] Created & persisted customer: ${newCustomer.name} (${newCustomer.id})`);
-    return res.status(201).json(newCustomer);
+    console.log(`[CUSTOMER] Created & saved in central DB: ${cleanCustomer.name} (${cleanCustomer.id})`);
+    return res.status(201).json(cleanCustomer);
   } catch (err: any) {
+    console.warn('[API /customers] Exception:', err?.message || err);
     return res.status(500).json({ message: err.message });
   }
 });
@@ -486,29 +574,42 @@ apiRouter.put('/customers/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const updates = req.body;
+    const cleanUpdates: Record<string, any> = { ...updates, updated_at: new Date().toISOString() };
+    delete cleanUpdates.id;
+    delete cleanUpdates.customer_type_name;
+    delete cleanUpdates.company_cans;
+
+    // 1. Always update server central database
     const db = loadDatabase();
     const idx = db.customers.findIndex(c => c.id === id);
-
     if (idx === -1) {
       return res.status(404).json({ message: 'Customer not found' });
     }
-
-    db.customers[idx] = {
-      ...db.customers[idx],
-      ...updates,
-      updated_at: new Date().toISOString(),
-    };
+    db.customers[idx] = { ...db.customers[idx], ...cleanUpdates };
     saveDatabase(db);
 
+    // 2. Also sync to Supabase if configured
     const supabase = getServerSupabase();
     if (supabase) {
       try {
-        await supabase.from('customers').update(updates).eq('id', id);
-      } catch (_) {}
+        const { data, error } = await supabase.from('customers').update(cleanUpdates).eq('id', id).select().maybeSingle();
+        if (error) {
+          console.warn('[API /customers/:id] Supabase UPDATE notice (updated in central DB):', error.message || error);
+        } else if (data) {
+          db.customers[idx] = { ...db.customers[idx], ...(data as Customer) };
+          saveDatabase(db);
+          console.log(`[CUSTOMER] Updated & verified in Supabase: (${id})`);
+          return res.json({ success: true, customer: db.customers[idx] });
+        }
+      } catch (err: any) {
+        console.warn('[API /customers/:id] Supabase UPDATE exception:', err?.message || err);
+      }
     }
 
+    console.log(`[CUSTOMER] Updated in central DB: (${id})`);
     return res.json({ success: true, customer: db.customers[idx] });
   } catch (err: any) {
+    console.warn('[API /customers/:id] Exception:', err?.message || err);
     return res.status(500).json({ message: err.message });
   }
 });
@@ -516,19 +617,31 @@ apiRouter.put('/customers/:id', async (req: Request, res: Response) => {
 apiRouter.delete('/customers/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
+    // 1. Always delete from server central database
     const db = loadDatabase();
     db.customers = db.customers.filter(c => c.id !== id);
     saveDatabase(db);
 
+    // 2. Also sync to Supabase if configured
     const supabase = getServerSupabase();
     if (supabase) {
       try {
-        await supabase.from('customers').delete().eq('id', id);
-      } catch (_) {}
+        const { error } = await supabase.from('customers').delete().eq('id', id);
+        if (error) {
+          console.warn('[API /customers/:id] Supabase DELETE notice (deleted in central DB):', error.message || error);
+        } else {
+          console.log(`[CUSTOMER] Deleted & verified in Supabase: (${id})`);
+        }
+      } catch (err: any) {
+        console.warn('[API /customers/:id] Supabase DELETE exception:', err?.message || err);
+      }
     }
 
+    console.log(`[CUSTOMER] Deleted from central DB: (${id})`);
     return res.json({ success: true });
   } catch (err: any) {
+    console.warn('[API /customers/:id] Exception:', err?.message || err);
     return res.status(500).json({ message: err.message });
   }
 });

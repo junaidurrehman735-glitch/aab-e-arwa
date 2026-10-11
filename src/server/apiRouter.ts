@@ -1873,9 +1873,30 @@ apiRouter.post('/cans/adjust-customer', async (req: Request, res: Response) => {
 // 11. PAYMENTS
 // -----------------------------------------------------------------------------
 
-apiRouter.get('/payments', (req: Request, res: Response) => {
+apiRouter.get('/payments', async (req: Request, res: Response) => {
+  const supabase = getServerSupabase();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('payments')
+        .select(`
+          *,
+          customer:customers (name, phone)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        const mapped = data.map((p: any) => ({
+          ...p,
+          customer_name: p.customer?.name || p.customer_name || '',
+          customer_phone: p.customer?.phone || p.customer_phone || '',
+        }));
+        return res.json(mapped);
+      }
+    } catch (_) {}
+  }
   const db = loadDatabase();
-  return res.json(db.payments);
+  return res.json(db.payments || []);
 });
 
 apiRouter.post('/payments', async (req: Request, res: Response) => {
@@ -1897,6 +1918,53 @@ apiRouter.post('/payments', async (req: Request, res: Response) => {
       notes: pay.notes || '',
       created_at: new Date().toISOString(),
     };
+
+    const supabase = getServerSupabase();
+    if (supabase) {
+      try {
+        await supabase.from('payments').insert({
+          id: newPayment.id,
+          payment_number: newPayment.payment_number,
+          customer_id: newPayment.customer_id,
+          amount: newPayment.amount,
+          payment_method: newPayment.payment_method,
+          payment_date: newPayment.payment_date,
+          reference: newPayment.reference || null,
+          notes: newPayment.notes || null,
+          created_at: newPayment.created_at,
+        });
+
+        if (pay.customer_id) {
+          const { data: dbCust } = await supabase
+            .from('customers')
+            .select('*')
+            .eq('id', pay.customer_id)
+            .maybeSingle();
+
+          if (dbCust) {
+            const newBal = Math.max(0, (dbCust.outstanding_balance || 0) - newPayment.amount);
+            await supabase
+              .from('customers')
+              .update({ outstanding_balance: newBal, updated_at: newPayment.created_at })
+              .eq('id', pay.customer_id);
+
+            await supabase.from('customer_ledger').insert({
+              id: `led-${Date.now()}`,
+              customer_id: pay.customer_id,
+              transaction_type: 'direct_payment',
+              reference_type: 'payment',
+              reference_id: id,
+              amount: newPayment.amount,
+              balance_after: newBal,
+              notes: `Direct payment received via ${newPayment.payment_method}`,
+              created_at: newPayment.created_at,
+            });
+          }
+        }
+      } catch (sbErr) {
+        console.error('[API /payments] Supabase payment insert error:', sbErr);
+      }
+    }
 
     db.payments.unshift(newPayment);
 
@@ -2066,37 +2134,154 @@ apiRouter.get('/reports/deliveries', (req: Request, res: Response) => {
   });
 });
 
-apiRouter.get('/dashboard/summary', (req: Request, res: Response) => {
-  const db = loadDatabase();
-  const invList = db.inventory;
-  const withCustomers = db.customers.reduce((s, c) => s + (Number(c.cans_held) || 0), 0);
-  const totalReceivables = db.customers.reduce((s, c) => s + (Number(c.outstanding_balance) || 0), 0);
+apiRouter.get('/dashboard/summary', async (req: Request, res: Response) => {
+  const supabase = getServerSupabase();
+  let orders: any[] = [];
+  let payments: any[] = [];
+  let deliveries: any[] = [];
+  let customers: any[] = [];
+  let products: any[] = [];
+  let inventory: any[] = [];
+  let expenses: any[] = [];
+  let fetchedFromSupabase = false;
 
-  const deliveriesDelivered = db.deliveries.filter(d => d.status === 'delivered').length;
-  const deliveriesInTransit = db.deliveries.filter(d => d.status === 'out_for_delivery' || d.status === 'assigned').length;
-  const deliveriesPending = db.deliveries.filter(d => d.status === 'assigned' || d.status === 'rescheduled').length;
+  if (supabase) {
+    try {
+      const [
+        ordersRes,
+        paymentsRes,
+        deliveriesRes,
+        customersRes,
+        productsRes,
+        inventoryRes,
+        expensesRes,
+      ] = await Promise.all([
+        supabase.from('orders').select('*').order('created_at', { ascending: false }),
+        supabase.from('payments').select('*').order('created_at', { ascending: false }),
+        supabase.from('deliveries').select('*').order('created_at', { ascending: false }),
+        supabase.from('customers').select('*').neq('status', 'archived').neq('status', 'inactive'),
+        supabase.from('products').select('*').eq('is_active', true),
+        supabase.from('inventory').select('*'),
+        supabase.from('expenses').select('*').order('created_at', { ascending: false }),
+      ]);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const todayOrders = db.orders.filter(o => o.created_at && o.created_at.slice(0, 10) === todayStr);
+      if (!ordersRes.error && ordersRes.data) orders = ordersRes.data;
+      if (!paymentsRes.error && paymentsRes.data) payments = paymentsRes.data;
+      if (!deliveriesRes.error && deliveriesRes.data) deliveries = deliveriesRes.data;
+      if (!customersRes.error && customersRes.data) customers = customersRes.data;
+      if (!productsRes.error && productsRes.data) products = productsRes.data;
+      if (!inventoryRes.error && inventoryRes.data) inventory = inventoryRes.data;
+      if (!expensesRes.error && expensesRes.data) expenses = expensesRes.data;
+
+      fetchedFromSupabase = true;
+    } catch (err) {
+      console.error('[API /dashboard/summary] Supabase query error:', err);
+    }
+  }
+
+  if (!fetchedFromSupabase) {
+    const db = loadDatabase();
+    orders = db.orders || [];
+    payments = db.payments || [];
+    deliveries = db.deliveries || [];
+    customers = db.customers || [];
+    products = db.products || [];
+    inventory = db.inventory || [];
+    expenses = db.expenses || [];
+  }
+
+  // Robust date comparison helper
+  const isDateToday = (dateVal?: string | null): boolean => {
+    if (!dateVal) return false;
+    const str = String(dateVal).trim();
+    if (!str) return false;
+    const now = new Date();
+    const utcToday = now.toISOString().slice(0, 10);
+    const localToday = now.toLocaleDateString('en-CA');
+    if (str.startsWith(utcToday) || str.startsWith(localToday)) return true;
+    try {
+      const parsed = new Date(str);
+      if (!isNaN(parsed.getTime())) {
+        const parsedUtc = parsed.toISOString().slice(0, 10);
+        const parsedLocal = parsed.toLocaleDateString('en-CA');
+        return parsedUtc === utcToday || parsedUtc === localToday || parsedLocal === utcToday || parsedLocal === localToday;
+      }
+    } catch (_) {}
+    return false;
+  };
+
+  const withCustomers = customers.reduce((s, c) => s + (Number(c.cans_held) || 0), 0);
+  const totalReceivables = customers.reduce((s, c) => s + (Number(c.outstanding_balance) || 0), 0);
+
+  const deliveriesDelivered = deliveries.filter(d => d.status === 'delivered').length;
+  const deliveriesInTransit = deliveries.filter(d => d.status === 'out_for_delivery' || d.status === 'assigned').length;
+  const deliveriesPending = deliveries.filter(d => d.status === 'assigned' || d.status === 'rescheduled' || d.status === 'pending').length;
+
+  const todayOrders = orders.filter(o =>
+    isDateToday(o.created_at) ||
+    isDateToday(o.delivery_date) ||
+    isDateToday(o.completed_at) ||
+    isDateToday(o.updated_at)
+  );
   const todaySales = todayOrders.reduce((s, o) => s + (Number(o.total_amount) || 0), 0);
 
-  const todayPayments = db.payments.filter(p => p.created_at && p.created_at.slice(0, 10) === todayStr);
-  const todayCollections = todayPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  // Calculate Cash Collected / Paid from today's payments & completed Cashpaid orders
+  const todayPayments = payments.filter(p => isDateToday(p.payment_date) || isDateToday(p.created_at));
+  let todayCollections = 0;
+  const coveredOrderIds = new Set<string>();
 
-  const todayExpensesList = db.expenses.filter(e => (e.date && e.date.slice(0, 10) === todayStr) || (e.created_at && e.created_at.slice(0, 10) === todayStr));
+  for (const p of todayPayments) {
+    todayCollections += Number(p.amount) || 0;
+    if (p.order_id) coveredOrderIds.add(String(p.order_id));
+    if (p.delivery_id) {
+      const del = deliveries.find(d => String(d.id) === String(p.delivery_id));
+      if (del && del.order_id) coveredOrderIds.add(String(del.order_id));
+    }
+  }
+
+  // Include completed orders marked as Cashpaid / paid that do not yet have an explicit payment ledger record
+  for (const o of todayOrders) {
+    const st = String(o.order_status || o.status || '').toLowerCase().trim();
+    const ps = String(o.payment_status || '').toLowerCase().trim();
+    const pm = String(o.payment_method || '').toLowerCase().trim();
+    const isCompleted = st === 'completed' || st === 'delivered';
+    const isCashPaid =
+      ps === 'paid' ||
+      ps === 'cashpaid' ||
+      ps === 'cash' ||
+      ps === 'cash_paid' ||
+      ps.includes('paid') ||
+      ps.includes('cash') ||
+      pm === 'cash';
+
+    if (isCompleted && isCashPaid) {
+      const ordId = String(o.id || '');
+      const ordNum = String(o.order_number || '');
+      if (!coveredOrderIds.has(ordId) && (!ordNum || !coveredOrderIds.has(ordNum))) {
+        todayCollections += Number(o.total_amount) || 0;
+        coveredOrderIds.add(ordId);
+      }
+    }
+  }
+
+  const todayExpensesList = expenses.filter(e => isDateToday(e.expense_date) || isDateToday(e.date) || isDateToday(e.created_at));
   const todayExpenses = todayExpensesList.reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
   const currentMonthStr = new Date().toISOString().slice(0, 7);
-  const monthOrders = db.orders.filter(o => o.created_at && o.created_at.slice(0, 7) === currentMonthStr);
+  const monthOrders = orders.filter(o => o.created_at && String(o.created_at).slice(0, 7) === currentMonthStr);
   const monthlyRevenue = monthOrders.reduce((s, o) => s + (Number(o.total_amount) || 0), 0);
 
-  const monthExpensesList = db.expenses.filter(e => (e.date && e.date.slice(0, 7) === currentMonthStr) || (e.created_at && e.created_at.slice(0, 7) === currentMonthStr));
+  const monthExpensesList = expenses.filter(e =>
+    (e.expense_date && String(e.expense_date).slice(0, 7) === currentMonthStr) ||
+    (e.date && String(e.date).slice(0, 7) === currentMonthStr) ||
+    (e.created_at && String(e.created_at).slice(0, 7) === currentMonthStr)
+  );
   const monthlyExpenses = monthExpensesList.reduce((s, e) => s + (Number(e.amount) || 0), 0);
   const monthlyProfit = monthlyRevenue - monthlyExpenses;
 
   // Actual inventory stock
-  const filledStock = invList.reduce((s, i) => s + (Number(i.filled_stock) || 0), 0) || db.products.reduce((s, p) => s + (Number(p.filled_stock) || 0), 0);
-  const emptyCansStock = invList.reduce((s, i) => s + (Number(i.empty_cans) || 0), 0) || db.products.reduce((s, p) => s + (Number(p.empty_cans) || 0), 0);
+  const filledStock = inventory.reduce((s, i) => s + (Number(i.filled_stock) || 0), 0) || products.reduce((s, p) => s + (Number(p.filled_stock) || 0), 0);
+  const emptyCansStock = inventory.reduce((s, i) => s + (Number(i.empty_cans) || 0), 0) || products.reduce((s, p) => s + (Number(p.empty_cans) || 0), 0);
 
   // 7-day sales trend from real records
   const days: { day: string; amount: number }[] = [];
@@ -2105,8 +2290,8 @@ apiRouter.get('/dashboard/summary', (req: Request, res: Response) => {
     d.setDate(d.getDate() - i);
     const dateStr = d.toISOString().slice(0, 10);
     const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
-    const daySales = db.orders
-      .filter(o => o.created_at && o.created_at.slice(0, 10) === dateStr)
+    const daySales = orders
+      .filter(o => o.created_at && String(o.created_at).slice(0, 10) === dateStr)
       .reduce((s, o) => s + (Number(o.total_amount) || 0), 0);
     days.push({ day: dayName, amount: daySales });
   }
@@ -2120,7 +2305,7 @@ apiRouter.get('/dashboard/summary', (req: Request, res: Response) => {
       filledStock,
       emptyCansStock,
       cansWithCustomers: withCustomers,
-      deliveriesToday: db.deliveries.length,
+      deliveriesToday: deliveries.length,
       deliveriesDelivered,
       deliveriesInTransit,
       deliveriesPending,
@@ -2128,17 +2313,17 @@ apiRouter.get('/dashboard/summary', (req: Request, res: Response) => {
       monthlyExpenses,
       monthlyProfit,
     },
-    recentDeliveries: db.deliveries.slice(0, 5),
-    recentOrders: db.orders.slice(0, 5),
-    lowStock: db.products
-      .filter(p => (Number(p.filled_stock) || 0) < 10 && db.products.length > 0)
+    recentDeliveries: deliveries.slice(0, 5),
+    recentOrders: orders.slice(0, 5),
+    lowStock: products
+      .filter(p => (Number(p.filled_stock) || 0) < 10 && products.length > 0)
       .map(p => ({
         name: p.name,
         size: p.size,
         filled_stock: Number(p.filled_stock) || 0,
         empty_cans: Number(p.empty_cans) || 0,
       })),
-    topDebtors: db.customers.filter(c => (Number(c.outstanding_balance) || 0) > 0).slice(0, 5),
+    topDebtors: customers.filter(c => (Number(c.outstanding_balance) || 0) > 0).slice(0, 5),
     salesTrend: days,
   });
 });

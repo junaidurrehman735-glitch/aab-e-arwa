@@ -296,6 +296,41 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
 
   const topOrderMax = rankedCustomers[0]?.orderCount || 1;
 
+  // Real Cash Collected / Paid aggregation (ensures completed Cashpaid orders are included)
+  let displayedCollections = Number(kpis.todayCollections) || 0;
+  if (displayedCollections === 0 && orders.length > 0) {
+    const isDateToday = (d?: string | null) => {
+      if (!d) return false;
+      const str = String(d).trim();
+      const now = new Date();
+      const utc = now.toISOString().slice(0, 10);
+      const loc = now.toLocaleDateString('en-CA');
+      return str.startsWith(utc) || str.startsWith(loc);
+    };
+    const completedCashOrders = orders.filter((o) => {
+      const st = String(o.order_status || (o as any).status || '').toLowerCase();
+      const ps = String(o.payment_status || '').toLowerCase();
+      const pm = String((o as any).payment_method || '').toLowerCase();
+      const isCompleted = st === 'completed' || st === 'delivered';
+      const isCashPaid =
+        ps === 'paid' ||
+        ps === 'cashpaid' ||
+        ps === 'cash' ||
+        ps.includes('paid') ||
+        ps.includes('cash') ||
+        pm === 'cash';
+      const isTodayOrder =
+        isDateToday(o.created_at) || isDateToday(o.delivery_date) || isDateToday((o as any).completed_at);
+      return isCompleted && isCashPaid && isTodayOrder;
+    });
+    if (completedCashOrders.length > 0) {
+      displayedCollections = completedCashOrders.reduce(
+        (sum, o) => sum + (Number(o.total_amount) || 0),
+        0
+      );
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Top Banner & Quick Actions */}
@@ -359,7 +394,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
           </div>
           <div className="mt-2">
             <div className="text-xl font-bold text-emerald-600 tabular-nums">
-              PKR {kpis.todayCollections.toLocaleString()}
+              PKR {displayedCollections.toLocaleString()}
             </div>
             <div className="text-[11px] text-slate-400 mt-0.5">Today's received payments</div>
           </div>

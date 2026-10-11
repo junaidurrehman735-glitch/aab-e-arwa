@@ -1754,30 +1754,89 @@ export const SupabaseDataService = {
     const orders = await this.getOrders();
     const customers = await this.getCustomers();
     const products = await this.getProducts();
-    const payments = isOwner ? await this.getPayments().catch(() => []) : [];
-    const expenses = isOwner ? await this.getExpenses().catch(() => []) : [];
+    const payments = await this.getPayments().catch(() => []);
+    const expenses = await this.getExpenses().catch(() => []);
 
     const deliveriesDelivered = deliveries.filter(d => d.status === 'delivered').length;
     const deliveriesInTransit = deliveries.filter(d => d.status === 'out_for_delivery' || d.status === 'assigned').length;
-    const deliveriesPending = deliveries.filter(d => d.status === 'assigned' || d.status === 'rescheduled').length;
+    const deliveriesPending = deliveries.filter(d => (d.status as string) === 'assigned' || (d.status as string) === 'rescheduled' || (d.status as string) === 'pending').length;
 
     const totalReceivables = isOwner ? customers.reduce((sum, c) => sum + (Number(c.outstanding_balance) || 0), 0) : 0;
 
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const todayOrders = orders.filter(o => o.created_at && o.created_at.slice(0, 10) === todayStr);
+    const isDateToday = (dateVal?: string | null): boolean => {
+      if (!dateVal) return false;
+      const str = String(dateVal).trim();
+      if (!str) return false;
+      const now = new Date();
+      const utcToday = now.toISOString().slice(0, 10);
+      const localToday = now.toLocaleDateString('en-CA');
+      if (str.startsWith(utcToday) || str.startsWith(localToday)) return true;
+      try {
+        const parsed = new Date(str);
+        if (!isNaN(parsed.getTime())) {
+          const parsedUtc = parsed.toISOString().slice(0, 10);
+          const parsedLocal = parsed.toLocaleDateString('en-CA');
+          return parsedUtc === utcToday || parsedUtc === localToday || parsedLocal === utcToday || parsedLocal === localToday;
+        }
+      } catch (_) {}
+      return false;
+    };
+
+    const todayOrders = orders.filter(o =>
+      isDateToday(o.created_at) ||
+      isDateToday(o.delivery_date) ||
+      isDateToday((o as any).completed_at) ||
+      isDateToday((o as any).updated_at)
+    );
     const todaySales = isOwner ? todayOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0) : 0;
 
-    const todayPayments = payments.filter(p => p.created_at && p.created_at.slice(0, 10) === todayStr);
-    const todayCollections = isOwner ? todayPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) : 0;
+    // Calculate Cash Collected / Today's Received Payments
+    const todayPayments = payments.filter(p => isDateToday(p.payment_date) || isDateToday(p.created_at));
+    let todayCollections = 0;
+    const coveredOrderIds = new Set<string>();
 
-    const todayExpensesList = expenses.filter(e => (e.expense_date && e.expense_date.slice(0, 10) === todayStr) || (e.created_at && e.created_at.slice(0, 10) === todayStr));
+    for (const p of todayPayments) {
+      todayCollections += Number(p.amount) || 0;
+      if (p.order_id) coveredOrderIds.add(String(p.order_id));
+      if (p.delivery_id) {
+        const del = deliveries.find(d => String(d.id) === String(p.delivery_id));
+        if (del && del.order_id) coveredOrderIds.add(String(del.order_id));
+      }
+    }
+
+    // Include completed orders marked as Cashpaid / paid that do not yet have an explicit payment ledger record
+    for (const o of todayOrders) {
+      const st = String(o.order_status || (o as any).status || '').toLowerCase().trim();
+      const ps = String(o.payment_status || '').toLowerCase().trim();
+      const pm = String((o as any).payment_method || '').toLowerCase().trim();
+      const isCompleted = st === 'completed' || st === 'delivered';
+      const isCashPaid =
+        ps === 'paid' ||
+        ps === 'cashpaid' ||
+        ps === 'cash' ||
+        ps === 'cash_paid' ||
+        ps.includes('paid') ||
+        ps.includes('cash') ||
+        pm === 'cash';
+
+      if (isCompleted && isCashPaid) {
+        const ordId = String(o.id || '');
+        const ordNum = String(o.order_number || '');
+        if (!coveredOrderIds.has(ordId) && (!ordNum || !coveredOrderIds.has(ordNum))) {
+          todayCollections += Number(o.total_amount) || 0;
+          coveredOrderIds.add(ordId);
+        }
+      }
+    }
+
+    const todayExpensesList = expenses.filter(e => isDateToday(e.expense_date) || isDateToday(e.created_at));
     const todayExpenses = isOwner ? todayExpensesList.reduce((sum, e) => sum + (Number(e.amount) || 0), 0) : 0;
 
     const currentMonthStr = new Date().toISOString().slice(0, 7);
-    const monthOrders = orders.filter(o => o.created_at && o.created_at.slice(0, 7) === currentMonthStr);
+    const monthOrders = orders.filter(o => o.created_at && String(o.created_at).slice(0, 7) === currentMonthStr);
     const monthlyRevenue = isOwner ? monthOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0) : 0;
 
-    const monthExpensesList = expenses.filter(e => (e.expense_date && e.expense_date.slice(0, 7) === currentMonthStr) || (e.created_at && e.created_at.slice(0, 7) === currentMonthStr));
+    const monthExpensesList = expenses.filter(e => (e.expense_date && String(e.expense_date).slice(0, 7) === currentMonthStr) || (e.created_at && String(e.created_at).slice(0, 7) === currentMonthStr));
     const monthlyExpenses = isOwner ? monthExpensesList.reduce((sum, e) => sum + (Number(e.amount) || 0), 0) : 0;
     const monthlyProfit = isOwner ? monthlyRevenue - monthlyExpenses : 0;
 

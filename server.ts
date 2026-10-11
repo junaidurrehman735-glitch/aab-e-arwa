@@ -27,6 +27,23 @@ app.use((req, res, next) => {
 // Mount Central Production API Router (Cross-device Single Source of Truth)
 app.use('/api', apiRouter);
 
+// Public SEO routes
+app.get('/sitemap.xml', (req, res) => {
+  const filePath = isDev
+    ? path.resolve(__dirname, 'public/sitemap.xml')
+    : path.resolve(__dirname, 'dist/sitemap.xml');
+  res.header('Content-Type', 'application/xml; charset=utf-8');
+  res.sendFile(filePath);
+});
+
+app.get('/robots.txt', (req, res) => {
+  const filePath = isDev
+    ? path.resolve(__dirname, 'public/robots.txt')
+    : path.resolve(__dirname, 'dist/robots.txt');
+  res.header('Content-Type', 'text/plain; charset=utf-8');
+  res.sendFile(filePath);
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({

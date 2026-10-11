@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://aab-e-arwa.vercel.app/sitemap.xml

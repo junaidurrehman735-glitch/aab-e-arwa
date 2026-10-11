@@ -101,11 +101,31 @@ INSERT INTO public.customer_types (id, name, description, default_discount) VALU
   ('ct-other', 'Other', 'Other customer classifications', 0)
 ON CONFLICT (id) DO NOTHING;
 
+-- DELIVERY AREAS TABLE
+CREATE TABLE IF NOT EXISTS public.delivery_areas (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  city TEXT DEFAULT 'Quetta',
+  is_active INTEGER DEFAULT 1,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+INSERT INTO public.delivery_areas (id, name) VALUES
+  ('area-chiltan', 'Chiltan Scheme Airport Road'),
+  ('area-nawakilli', 'Nawa Killi Bypass'),
+  ('area-jinnah', 'Main Jinnah Road'),
+  ('area-quetta-ave', 'Quetta Avenue City'),
+  ('area-hazara', 'Hazara Town'),
+  ('area-mariabad', 'Mariabad')
+ON CONFLICT (id) DO NOTHING;
+
 -- CUSTOMERS TABLE
 CREATE TABLE IF NOT EXISTS public.customers (
   id TEXT PRIMARY KEY DEFAULT ('cust-' || substring(replace(uuid_generate_v4()::text, '-', ''), 1, 12)),
   name TEXT NOT NULL,
+  contact_person TEXT,
   phone TEXT NOT NULL,
+  whatsapp TEXT,
   address TEXT NOT NULL,
   area TEXT NOT NULL,
   area_access TEXT DEFAULT 'Specific Area',
@@ -468,6 +488,17 @@ ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.supplier_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.delivery_areas ENABLE ROW LEVEL SECURITY;
+
+-- ------------------------------------------------------------------------------
+-- RLS POLICIES FOR DELIVERY AREAS
+-- ------------------------------------------------------------------------------
+CREATE POLICY "all_view_delivery_areas" ON public.delivery_areas
+  FOR SELECT TO authenticated, anon USING (true);
+
+CREATE POLICY "owner_manager_manage_delivery_areas" ON public.delivery_areas
+  FOR ALL TO authenticated
+  USING (public.current_user_role() IN ('Owner', 'Manager'));
 
 -- ------------------------------------------------------------------------------
 -- RLS POLICIES FOR USERS / STAFF MANAGEMENT & ROLES
@@ -651,6 +682,47 @@ CREATE POLICY "owner_manager_full_audit_logs" ON public.audit_logs
 
 CREATE POLICY "all_authenticated_insert_audit_logs" ON public.audit_logs
   FOR INSERT TO authenticated WITH CHECK (true);
+
+-- ------------------------------------------------------------------------------
+-- BACKEND & CENTRAL SYNC POLICIES (FOR SERVER API PROXY USING ANON KEY)
+-- ------------------------------------------------------------------------------
+CREATE POLICY "anon_customers_access" ON public.customers FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_orders_access" ON public.orders FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_order_items_access" ON public.order_items FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_deliveries_access" ON public.deliveries FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_delivery_items_access" ON public.delivery_items FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_products_access" ON public.products FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_inventory_access" ON public.inventory FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_can_movements_access" ON public.customer_can_movements FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_customer_types_access" ON public.customer_types FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_roles_access" ON public.roles FOR SELECT TO anon USING (true);
+CREATE POLICY "anon_permissions_access" ON public.permissions FOR SELECT TO anon USING (true);
+CREATE POLICY "anon_suppliers_access" ON public.suppliers FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_expenses_access" ON public.expenses FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_expense_categories_access" ON public.expense_categories FOR SELECT TO anon USING (true);
+CREATE POLICY "anon_payments_access" ON public.payments FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_ledger_access" ON public.customer_ledger FOR ALL TO anon USING (true) WITH CHECK (true);
+
+-- ==============================================================================
+-- 6. PERFORMANCE INDEXES
+-- ==============================================================================
+CREATE INDEX IF NOT EXISTS idx_customers_area ON public.customers(area);
+CREATE INDEX IF NOT EXISTS idx_customers_type ON public.customers(customer_type_id);
+CREATE INDEX IF NOT EXISTS idx_customers_status ON public.customers(status);
+CREATE INDEX IF NOT EXISTS idx_customers_phone ON public.customers(phone);
+CREATE INDEX IF NOT EXISTS idx_orders_customer ON public.orders(customer_id);
+CREATE INDEX IF NOT EXISTS idx_orders_delivery_date ON public.orders(delivery_date);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(order_status);
+CREATE INDEX IF NOT EXISTS idx_order_items_order ON public.order_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_deliveries_driver ON public.deliveries(driver_id);
+CREATE INDEX IF NOT EXISTS idx_deliveries_date ON public.deliveries(delivery_date);
+CREATE INDEX IF NOT EXISTS idx_deliveries_status ON public.deliveries(status);
+CREATE INDEX IF NOT EXISTS idx_can_movements_customer ON public.customer_can_movements(customer_id);
+CREATE INDEX IF NOT EXISTS idx_ledger_customer ON public.customer_ledger(customer_id);
+CREATE INDEX IF NOT EXISTS idx_payments_customer ON public.payments(customer_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_category ON public.expenses(category_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_date ON public.expenses(expense_date);
+CREATE INDEX IF NOT EXISTS idx_suppliers_name ON public.suppliers(name);
 
 -- ==============================================================================
 -- 4. POSTGREST SCHEMA ACCESS & PERMISSIONS (ENABLE CLIENT ACCESS ACROSS DEVICES)

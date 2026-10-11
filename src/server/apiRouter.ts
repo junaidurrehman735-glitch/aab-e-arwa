@@ -516,7 +516,9 @@ apiRouter.post('/customers', async (req: Request, res: Response) => {
     const cleanCustomer: Record<string, any> = {
       id,
       name: customerData.name.trim(),
+      contact_person: customerData.contact_person || '',
       phone: customerData.phone.trim(),
+      whatsapp: customerData.whatsapp || '',
       address: customerData.address.trim(),
       area: customerData.area || 'Chiltan Scheme Airport Road',
       area_access: customerData.area_access || 'Specific Area',

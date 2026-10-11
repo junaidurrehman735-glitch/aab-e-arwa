@@ -226,7 +226,9 @@ export const PaymentsPage: React.FC = () => {
               ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-12 text-center text-slate-400">
-                    No payment records found.
+                    <DollarSign className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="font-medium text-slate-500">No payments yet</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Customer payments and cash collections will appear here.</p>
                   </td>
                 </tr>
               ) : (

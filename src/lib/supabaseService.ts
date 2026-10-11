@@ -77,11 +77,7 @@ const DEFAULT_CUSTOMER_TYPES = [
   { id: 'ct-other', name: 'Other', description: 'Other customer classifications', default_discount: 0 },
 ];
 
-const DEFAULT_PRODUCTS = [
-  { id: 'prod-19l-can', name: 'AAB E ARWA 19L Premium Water Can', size: '19 Liter', unit: 'Can', selling_price: 220, cost_price: 65, is_reusable: 1, is_active: 1 },
-  { id: 'prod-1.5l-bottle', name: 'AAB E ARWA 1.5L Drinking Water (Pack of 6)', size: '1.5 Liter (6-Pack)', unit: 'Pack', selling_price: 360, cost_price: 190, is_reusable: 0, is_active: 1 },
-  { id: 'prod-500ml-bottle', name: 'AAB E ARWA 500ml Mineral Water (Pack of 12)', size: '500ml (12-Pack)', unit: 'Pack', selling_price: 520, cost_price: 310, is_reusable: 0, is_active: 1 },
-];
+const DEFAULT_PRODUCTS: Product[] = [];
 
 const DEFAULT_EXPENSE_CATEGORIES = [
   { id: 'exp-fuel', name: 'Fuel & Delivery Logistics', description: 'Diesel and petrol for delivery vans', is_active: 1 },
@@ -95,6 +91,24 @@ const DEFAULT_EXPENSE_CATEGORIES = [
 
 // In-memory synchronization cache to ensure seamless UI reactivity across Vercel deployments
 let memoryStorage: Record<string, any[]> = {};
+
+// Clean start database version purge
+const CLEAN_DB_VERSION = 'clean_start_v1';
+try {
+  if (typeof localStorage !== 'undefined') {
+    const currentVer = localStorage.getItem('aab_clean_start_version');
+    if (currentVer !== CLEAN_DB_VERSION) {
+      const tablesToClean = [
+        'customers', 'products', 'inventory', 'inventory_movements',
+        'production_records', 'orders', 'order_items', 'deliveries',
+        'customer_can_movements', 'customer_ledger', 'payments', 'expenses',
+        'suppliers', 'supplier_transactions', 'audit_logs'
+      ];
+      tablesToClean.forEach(t => localStorage.removeItem(`aab_db_${t}`));
+      localStorage.setItem('aab_clean_start_version', CLEAN_DB_VERSION);
+    }
+  }
+} catch (_) {}
 
 function getMem(table: string): any[] {
   if (!memoryStorage[table]) {
@@ -871,7 +885,7 @@ export const SupabaseDataService = {
       name: customerData.name || '',
       phone: customerData.phone || '',
       address: customerData.address || '',
-      area: customerData.area || 'Other',
+      area: customerData.area || 'Chiltan Scheme Airport Road',
       area_access: customerData.area_access || 'Specific Area',
       customer_type_id: customerData.customer_type_id || 'ct-home',
       customer_type_name: customerData.customer_type_name || 'Residential Home',
@@ -931,7 +945,7 @@ export const SupabaseDataService = {
         return data as Product[];
       }
     }
-    return DEFAULT_PRODUCTS as Product[];
+    return (getMem('products') || []) as Product[];
   },
 
   async createProduct(prod: Partial<Product>): Promise<Product> {
@@ -964,6 +978,24 @@ export const SupabaseDataService = {
     mem.push(newProd);
     saveMem('products', mem);
 
+    const invMem = getMem('inventory');
+    invMem.push({
+      id: `inv-${Date.now()}`,
+      product_id: id,
+      product_name: newProd.name,
+      size: newProd.size,
+      unit: newProd.unit,
+      selling_price: newProd.selling_price,
+      cost_price: newProd.cost_price,
+      filled_stock: newProd.filled_stock || 0,
+      empty_cans: newProd.empty_cans || 0,
+      damaged_cans: 0,
+      lost_cans: 0,
+      is_reusable: newProd.is_reusable,
+      updated_at: new Date().toISOString(),
+    });
+    saveMem('inventory', invMem);
+
     return newProd;
   },
 
@@ -995,11 +1027,7 @@ export const SupabaseDataService = {
       }
     }
 
-    return [
-      { id: 'inv-19l', product_id: 'prod-19l-can', product_name: 'AAB E ARWA 19L Premium Water Can', size: '19 Liter', unit: 'Can', selling_price: 220, cost_price: 65, filled_stock: 350, empty_cans: 280, damaged_cans: 5, lost_cans: 2, is_reusable: 1, updated_at: new Date().toISOString() },
-      { id: 'inv-1.5l', product_id: 'prod-1.5l-bottle', product_name: 'AAB E ARWA 1.5L Drinking Water (Pack of 6)', size: '1.5 Liter (6-Pack)', unit: 'Pack', selling_price: 360, cost_price: 190, filled_stock: 90, empty_cans: 0, damaged_cans: 0, lost_cans: 0, is_reusable: 0, updated_at: new Date().toISOString() },
-      { id: 'inv-500ml', product_id: 'prod-500ml-bottle', product_name: 'AAB E ARWA 500ml Mineral Water (Pack of 12)', size: '500ml (12-Pack)', unit: 'Pack', selling_price: 520, cost_price: 310, filled_stock: 110, empty_cans: 0, damaged_cans: 0, lost_cans: 0, is_reusable: 0, updated_at: new Date().toISOString() },
-    ];
+    return (getMem('inventory') || []) as InventoryItem[];
   },
 
   async adjustInventory(adj: { product_id: string; stock_type: string; quantity: number; reason: string }): Promise<void> {
@@ -1358,9 +1386,12 @@ export const SupabaseDataService = {
       // Memory cache fallback if client not initialized
       const custs = getMem('customers');
       customerRankings = custs.slice().sort((a, b) => (b.cans_held || 0) - (a.cans_held || 0));
-      withCustomers = custs.reduce((sum, c) => sum + (c.cans_held || 0), 0);
-      emptyInWarehouse = 280;
-      filledInWarehouse = 350;
+      withCustomers = custs.reduce((sum, c) => sum + (Number(c.cans_held) || 0), 0);
+      const invList = getMem('inventory');
+      emptyInWarehouse = invList.reduce((sum, i) => sum + (Number(i.empty_cans) || 0), 0);
+      filledInWarehouse = invList.reduce((sum, i) => sum + (Number(i.filled_stock) || 0), 0);
+      damagedCans = invList.reduce((sum, i) => sum + (Number(i.damaged_cans) || 0), 0);
+      lostCans = invList.reduce((sum, i) => sum + (Number(i.lost_cans) || 0), 0);
       recentCanMovements = getMem('customer_can_movements') || [];
     }
 
@@ -1534,10 +1565,7 @@ export const SupabaseDataService = {
         return data as Supplier[];
       }
     }
-    return [
-      { id: 'sup-1', name: 'Apex Containers Ltd.', contact_person: 'Salman Qureshi', phone: '+92 301 8847120', materials_supplied: '19L Polycarbonate Cans', outstanding_payable: 45000, created_at: new Date().toISOString() },
-      { id: 'sup-2', name: 'Ozone & Membrane Supplies', contact_person: 'Farooq Ahmad', phone: '+92 322 9918230', materials_supplied: 'RO Membrane Washes, Ozone Spares', outstanding_payable: 18000, created_at: new Date().toISOString() },
-    ];
+    return (getMem('suppliers') || []) as Supplier[];
   },
 
   async createSupplier(sup: Partial<Supplier>): Promise<{ id: string }> {
@@ -1587,24 +1615,50 @@ export const SupabaseDataService = {
 
   async getSalesReport(): Promise<any> {
     assertRole(['Owner', 'Manager'], 'view sales breakdowns');
+    const orders = await this.getOrders();
+    const monthMap = new Map<string, { total: number; count: number }>();
+    const productMap = new Map<string, { name: string; quantity: number; revenue: number }>();
+
+    orders.forEach((o: any) => {
+      const monthKey = o.created_at ? new Date(o.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Recent';
+      const current = monthMap.get(monthKey) || { total: 0, count: 0 };
+      current.total += Number(o.total_amount) || 0;
+      current.count += 1;
+      monthMap.set(monthKey, current);
+
+      (o.items || []).forEach((item: any) => {
+        const prodName = item.product_name || 'Bottle';
+        const pEntry = productMap.get(prodName) || { name: prodName, quantity: 0, revenue: 0 };
+        pEntry.quantity += Number(item.quantity) || 0;
+        pEntry.revenue += Number(item.total_price || (item.unit_price * item.quantity)) || 0;
+        productMap.set(prodName, pEntry);
+      });
+    });
+
     return {
-      monthlySales: [
-        { month: 'Oct 2026', total: 185400, count: 620 },
-      ],
-      productBreakdown: [
-        { name: '19L Premium Can', quantity: 580, revenue: 127600 },
-        { name: '1.5L Pack of 6', quantity: 95, revenue: 34200 },
-        { name: '500ml Pack of 12', quantity: 45, revenue: 23600 },
-      ],
+      monthlySales: Array.from(monthMap.entries()).map(([month, data]) => ({
+        month,
+        total: data.total,
+        count: data.count,
+      })),
+      productBreakdown: Array.from(productMap.values()),
     };
   },
 
   async getDeliveryReport(): Promise<any> {
     assertRole(['Owner', 'Manager'], 'view logistics delivery report');
+    const deliveries = await this.getDeliveries();
+    const delivered = deliveries.filter(d => d.status === 'delivered').length;
+    const onTimeRate = deliveries.length > 0 ? `${Math.round((delivered / deliveries.length) * 100)}%` : '0%';
+    const canSummary = await this.getCanSummary();
+    const cansReturned = (canSummary.recentCanMovements || [])
+      .filter((m: any) => m.movement_type === 'returned')
+      .reduce((s: number, m: any) => s + (Number(m.quantity) || 0), 0);
+
     return {
-      totalDeliveries: 48,
-      onTimeRate: '96%',
-      cansReturned: 42,
+      totalDeliveries: deliveries.length,
+      onTimeRate,
+      cansReturned,
     };
   },
 
@@ -1618,57 +1672,79 @@ export const SupabaseDataService = {
     const orders = await this.getOrders();
     const customers = await this.getCustomers();
     const products = await this.getProducts();
+    const payments = isOwner ? await this.getPayments().catch(() => []) : [];
+    const expenses = isOwner ? await this.getExpenses().catch(() => []) : [];
 
     const deliveriesDelivered = deliveries.filter(d => d.status === 'delivered').length;
     const deliveriesInTransit = deliveries.filter(d => d.status === 'out_for_delivery' || d.status === 'assigned').length;
     const deliveriesPending = deliveries.filter(d => d.status === 'assigned' || d.status === 'rescheduled').length;
 
-    const totalReceivables = isOwner ? customers.reduce((sum, c) => sum + (c.outstanding_balance || 0), 0) : 0;
+    const totalReceivables = isOwner ? customers.reduce((sum, c) => sum + (Number(c.outstanding_balance) || 0), 0) : 0;
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayOrders = orders.filter(o => o.created_at && o.created_at.slice(0, 10) === todayStr);
+    const todaySales = isOwner ? todayOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0) : 0;
+
+    const todayPayments = payments.filter(p => p.created_at && p.created_at.slice(0, 10) === todayStr);
+    const todayCollections = isOwner ? todayPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) : 0;
+
+    const todayExpensesList = expenses.filter(e => (e.expense_date && e.expense_date.slice(0, 10) === todayStr) || (e.created_at && e.created_at.slice(0, 10) === todayStr));
+    const todayExpenses = isOwner ? todayExpensesList.reduce((sum, e) => sum + (Number(e.amount) || 0), 0) : 0;
+
+    const currentMonthStr = new Date().toISOString().slice(0, 7);
+    const monthOrders = orders.filter(o => o.created_at && o.created_at.slice(0, 7) === currentMonthStr);
+    const monthlyRevenue = isOwner ? monthOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0) : 0;
+
+    const monthExpensesList = expenses.filter(e => (e.expense_date && e.expense_date.slice(0, 7) === currentMonthStr) || (e.created_at && e.created_at.slice(0, 7) === currentMonthStr));
+    const monthlyExpenses = isOwner ? monthExpensesList.reduce((sum, e) => sum + (Number(e.amount) || 0), 0) : 0;
+    const monthlyProfit = isOwner ? monthlyRevenue - monthlyExpenses : 0;
+
+    const filledStock = Number(cans.factoryFilled) || products.reduce((sum, p) => sum + (Number(p.filled_stock) || 0), 0);
+    const emptyCansStock = Number(cans.factoryEmpty) || products.reduce((sum, p) => sum + (Number(p.empty_cans) || 0), 0);
+    const cansWithCustomers = Number(cans.customerHeld) || customers.reduce((sum, c) => sum + (Number(c.cans_held) || 0), 0);
 
     const kpis = {
-      todaySales: isOwner ? 18400 : 0,
-      todayCollections: isOwner ? 16200 : 0,
-      todayExpenses: isOwner ? 4800 : 0,
+      todaySales,
+      todayCollections,
+      todayExpenses,
       totalReceivables,
-      filledStock: cans.factoryFilled || 350,
-      emptyCansStock: cans.factoryEmpty || 280,
-      cansWithCustomers: cans.customerHeld || 210,
+      filledStock,
+      emptyCansStock,
+      cansWithCustomers,
       deliveriesToday: deliveries.length,
       deliveriesDelivered,
       deliveriesInTransit,
       deliveriesPending,
-      monthlyRevenue: isOwner ? 185400 : 0,
-      monthlyExpenses: isOwner ? 72100 : 0,
-      monthlyProfit: isOwner ? 113300 : 0,
+      monthlyRevenue,
+      monthlyExpenses,
+      monthlyProfit,
     };
 
     const recentDeliveries = deliveries.slice(0, 5);
     const recentOrders = orders.slice(0, 5);
-    const lowStock = products.map(p => ({
-      name: p.name,
-      size: p.size,
-      filled_stock: p.filled_stock || 150,
-      empty_cans: p.empty_cans || 80,
-    }));
-    const topDebtors = isOwner ? customers.filter(c => c.outstanding_balance > 0).slice(0, 5) : [];
+    const lowStock = products
+      .filter(p => (Number(p.filled_stock) || 0) < 10 && products.length > 0)
+      .map(p => ({
+        name: p.name,
+        size: p.size,
+        filled_stock: Number(p.filled_stock) || 0,
+        empty_cans: Number(p.empty_cans) || 0,
+      }));
+    const topDebtors = isOwner ? customers.filter(c => (Number(c.outstanding_balance) || 0) > 0).slice(0, 5) : [];
 
-    const salesTrend = isOwner ? [
-      { day: 'Mon', amount: 15400 },
-      { day: 'Tue', amount: 18200 },
-      { day: 'Wed', amount: 22100 },
-      { day: 'Thu', amount: 19800 },
-      { day: 'Fri', amount: 24500 },
-      { day: 'Sat', amount: 21300 },
-      { day: 'Sun', amount: 16900 },
-    ] : [
-      { day: 'Mon', amount: 0 },
-      { day: 'Tue', amount: 0 },
-      { day: 'Wed', amount: 0 },
-      { day: 'Thu', amount: 0 },
-      { day: 'Fri', amount: 0 },
-      { day: 'Sat', amount: 0 },
-      { day: 'Sun', amount: 0 },
-    ];
+    const salesTrend: { day: string; amount: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().slice(0, 10);
+      const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+      const daySales = isOwner
+        ? orders
+            .filter(o => o.created_at && o.created_at.slice(0, 10) === dateStr)
+            .reduce((s, o) => s + (Number(o.total_amount) || 0), 0)
+        : 0;
+      salesTrend.push({ day: dayName, amount: daySales });
+    }
 
     return {
       kpis,

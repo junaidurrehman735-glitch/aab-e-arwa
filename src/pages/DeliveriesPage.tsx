@@ -185,6 +185,7 @@ export const DeliveriesPage: React.FC = () => {
                 {a}
               </option>
             ))}
+            <option value="__temporary__">Temporary / Other Areas</option>
           </select>
 
           <select
@@ -216,8 +217,10 @@ export const DeliveriesPage: React.FC = () => {
             Loading delivery manifests...
           </div>
         ) : deliveries.length === 0 ? (
-          <div className="bg-white p-12 text-center text-xs text-slate-400 rounded-xl border border-slate-200">
-            No deliveries found for the selected criteria.
+          <div className="bg-white p-12 text-center text-slate-400 rounded-xl border border-slate-200">
+            <Truck className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+            <p className="font-medium text-slate-500 text-xs">No deliveries yet</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">Deliveries are created automatically when customer orders are booked.</p>
           </div>
         ) : (
           deliveries.map((del) => (

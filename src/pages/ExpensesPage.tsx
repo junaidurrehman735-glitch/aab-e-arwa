@@ -205,7 +205,9 @@ export const ExpensesPage: React.FC = () => {
               ) : expenses.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-12 text-center text-slate-400">
-                    No expense records found.
+                    <Receipt className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="font-medium text-slate-500">No expenses yet</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Click "Add Plant Operating Expense" to record factory overheads.</p>
                   </td>
                 </tr>
               ) : (

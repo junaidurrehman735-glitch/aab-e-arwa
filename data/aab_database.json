@@ -10,7 +10,7 @@
       "status": "active"
     },
     {
-      "id": "owner-user-junaid-uuid",
+      "id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
       "email": "junaidurrehman735@gmail.com",
       "name": "Junaid ur Rehman",
       "role_id": "role-owner",
@@ -99,259 +99,17 @@
       "default_discount": 0
     }
   ],
-  "customers": [
-    {
-      "id": "cust-1791606080975",
-      "name": "SuperMart Gulberg",
-      "phone": "+92 300 7771122",
-      "address": "Main Boulevard, Gulberg III",
-      "area": "Gulberg",
-      "area_access": "Specific Area",
-      "customer_type_id": "ct-home",
-      "customer_type_name": "Residential Home",
-      "selling_rate": 220,
-      "payment_type": "Cash",
-      "cash_status": "Cash on Delivery",
-      "credit_limit": 0,
-      "outstanding_balance": 0,
-      "cans_held": 0,
-      "net_deposit_amount": 0,
-      "notes": "",
-      "delivery_instructions": "",
-      "status": "active",
-      "created_at": "2026-10-10T04:21:20.975Z"
-    },
-    {
-      "id": "cust-1",
-      "name": "Al-Madina General Store",
-      "phone": "+92 300 4567890",
-      "address": "Shop 12, Main Market",
-      "area": "Gulberg",
-      "area_access": "Specific Area",
-      "customer_type_id": "ct-shop",
-      "customer_type_name": "Shop",
-      "selling_rate": 220,
-      "payment_type": "Cash",
-      "cash_status": "Cash on Delivery",
-      "credit_limit": 5000,
-      "outstanding_balance": 1100,
-      "cans_held": 15,
-      "net_deposit_amount": 18000,
-      "notes": "Daily morning delivery required",
-      "delivery_instructions": "Deliver before 10 AM",
-      "status": "active",
-      "created_at": "2026-10-10T04:18:07.362Z"
-    },
-    {
-      "id": "cust-2",
-      "name": "Royal Palace Banquet & Caterers",
-      "phone": "+92 321 8765432",
-      "address": "Plot 45, Commercial Avenue",
-      "area": "DHA",
-      "area_access": "Specific Area",
-      "customer_type_id": "ct-restaurant",
-      "customer_type_name": "Restaurant",
-      "selling_rate": 210,
-      "payment_type": "Credit",
-      "cash_status": "Credit Account",
-      "credit_limit": 25000,
-      "outstanding_balance": 6300,
-      "cans_held": 35,
-      "net_deposit_amount": 42000,
-      "notes": "Bulk weekend delivery",
-      "delivery_instructions": "Gate 2 rear entrance",
-      "status": "active",
-      "created_at": "2026-10-10T04:18:07.362Z"
-    }
-  ],
-  "products": [
-    {
-      "id": "prod-19l-can",
-      "name": "AAB E ARWA 19L Premium Water Can",
-      "size": "19 Liter",
-      "unit": "Can",
-      "selling_price": 220,
-      "cost_price": 65,
-      "is_reusable": 1,
-      "is_active": 1,
-      "filled_stock": 350,
-      "empty_cans": 280
-    },
-    {
-      "id": "prod-1.5l-bottle",
-      "name": "AAB E ARWA 1.5L Drinking Water (Pack of 6)",
-      "size": "1.5 Liter (6-Pack)",
-      "unit": "Pack",
-      "selling_price": 360,
-      "cost_price": 190,
-      "is_reusable": 0,
-      "is_active": 1,
-      "filled_stock": 90,
-      "empty_cans": 0
-    },
-    {
-      "id": "prod-500ml-bottle",
-      "name": "AAB E ARWA 500ml Mineral Water (Pack of 12)",
-      "size": "500ml (12-Pack)",
-      "unit": "Pack",
-      "selling_price": 520,
-      "cost_price": 310,
-      "is_reusable": 0,
-      "is_active": 1,
-      "filled_stock": 110,
-      "empty_cans": 0
-    }
-  ],
-  "inventory": [
-    {
-      "id": "inv-19l",
-      "product_id": "prod-19l-can",
-      "product_name": "AAB E ARWA 19L Premium Water Can",
-      "size": "19 Liter",
-      "unit": "Can",
-      "selling_price": 220,
-      "cost_price": 65,
-      "filled_stock": 350,
-      "empty_cans": 280,
-      "damaged_cans": 5,
-      "lost_cans": 2,
-      "is_reusable": 1,
-      "updated_at": "2026-10-10T04:18:07.362Z"
-    },
-    {
-      "id": "inv-1.5l",
-      "product_id": "prod-1.5l-bottle",
-      "product_name": "AAB E ARWA 1.5L Drinking Water (Pack of 6)",
-      "size": "1.5 Liter (6-Pack)",
-      "unit": "Pack",
-      "selling_price": 360,
-      "cost_price": 190,
-      "filled_stock": 90,
-      "empty_cans": 0,
-      "damaged_cans": 0,
-      "lost_cans": 0,
-      "is_reusable": 0,
-      "updated_at": "2026-10-10T04:18:07.362Z"
-    },
-    {
-      "id": "inv-500ml",
-      "product_id": "prod-500ml-bottle",
-      "product_name": "AAB E ARWA 500ml Mineral Water (Pack of 12)",
-      "size": "500ml (12-Pack)",
-      "unit": "Pack",
-      "selling_price": 520,
-      "cost_price": 310,
-      "filled_stock": 110,
-      "empty_cans": 0,
-      "damaged_cans": 0,
-      "lost_cans": 0,
-      "is_reusable": 0,
-      "updated_at": "2026-10-10T04:18:07.362Z"
-    }
-  ],
+  "customers": [],
+  "products": [],
+  "inventory": [],
   "inventory_movements": [],
   "production_records": [],
-  "orders": [
-    {
-      "id": "ord-1791606081253",
-      "order_number": "ORD-081253",
-      "customer_id": "cust-1791606080975",
-      "customer_name": "SuperMart Gulberg",
-      "customer_phone": "+92 300 7771122",
-      "customer_area": "Gulberg",
-      "total_amount": 2200,
-      "payment_type": "Cash",
-      "payment_status": "pending",
-      "order_status": "dispatched",
-      "delivery_date": "2026-10-15",
-      "delivery_address": "Main Boulevard, Gulberg III",
-      "notes": "",
-      "items": [
-        {
-          "product_id": "prod-19l-can",
-          "quantity": 10,
-          "unit_price": 220
-        }
-      ],
-      "created_at": "2026-10-10T04:21:21.253Z"
-    }
-  ],
-  "order_items": [
-    {
-      "id": "oi-1791606081253-0.2536704988641818",
-      "order_id": "ord-1791606081253",
-      "product_id": "prod-19l-can",
-      "quantity": 10,
-      "unit_price": 220,
-      "total_price": 2200
-    }
-  ],
-  "deliveries": [
-    {
-      "id": "del-1791606081526",
-      "delivery_number": "DEL-081526",
-      "order_id": "ord-1791606081253",
-      "customer_id": "cust-1791606080975",
-      "customer_name": "SuperMart Gulberg",
-      "customer_phone": "+92 300 7771122",
-      "customer_address": "Main Boulevard, Gulberg III",
-      "customer_area": "Gulberg",
-      "driver_id": "driver-01",
-      "driver_name": "Driver",
-      "vehicle": "Van #1",
-      "delivery_date": "2026-10-15",
-      "delivery_time": "Morning",
-      "status": "delivered",
-      "total_amount": 2200,
-      "notes": "",
-      "created_at": "2026-10-10T04:21:21.526Z",
-      "empty_cans_returned": 10,
-      "payment_collected": 2200,
-      "payment_method": "Cash",
-      "completed_at": "2026-10-10T04:21:21.624Z"
-    }
-  ],
-  "customer_can_movements": [
-    {
-      "id": "ccm-1791606081624",
-      "customer_id": "cust-1791606080975",
-      "product_id": "prod-19l-can",
-      "movement_type": "returned",
-      "quantity": 10,
-      "balance_after": 0,
-      "delivery_id": "del-1791606081526",
-      "reason": "Returned from Delivery DEL-081526",
-      "created_at": "2026-10-10T04:21:21.624Z"
-    }
-  ],
-  "customer_ledger": [
-    {
-      "id": "led-1791606081624",
-      "customer_id": "cust-1791606080975",
-      "transaction_type": "payment",
-      "reference_type": "delivery",
-      "reference_id": "del-1791606081526",
-      "debit": 0,
-      "credit": 2200,
-      "balance": 0,
-      "description": "Cash collection from delivery DEL-081526",
-      "transaction_date": "2026-10-10",
-      "created_at": "2026-10-10T04:21:21.624Z"
-    }
-  ],
-  "payments": [
-    {
-      "id": "pay-1791606081624",
-      "payment_number": "PAY-081624",
-      "customer_id": "cust-1791606080975",
-      "order_id": "ord-1791606081253",
-      "delivery_id": "del-1791606081526",
-      "amount": 2200,
-      "payment_method": "Cash",
-      "payment_date": "2026-10-10",
-      "created_at": "2026-10-10T04:21:21.624Z"
-    }
-  ],
+  "orders": [],
+  "order_items": [],
+  "deliveries": [],
+  "customer_can_movements": [],
+  "customer_ledger": [],
+  "payments": [],
   "expenses": [],
   "expense_categories": [
     {
@@ -397,26 +155,7 @@
       "is_active": 1
     }
   ],
-  "suppliers": [
-    {
-      "id": "sup-1",
-      "name": "Apex Containers Ltd.",
-      "contact_person": "Salman Qureshi",
-      "phone": "+92 301 8847120",
-      "materials_supplied": "19L Polycarbonate Cans",
-      "outstanding_payable": 45000,
-      "created_at": "2026-10-10T04:18:07.362Z"
-    },
-    {
-      "id": "sup-2",
-      "name": "Ozone & Membrane Supplies",
-      "contact_person": "Farooq Ahmad",
-      "phone": "+92 322 9918230",
-      "materials_supplied": "RO Membrane Washes, Ozone Spares",
-      "outstanding_payable": 18000,
-      "created_at": "2026-10-10T04:18:07.362Z"
-    }
-  ],
+  "suppliers": [],
   "supplier_transactions": [],
   "audit_logs": [],
   "settings": {

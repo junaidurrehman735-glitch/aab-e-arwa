@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api.ts';
-import { DashboardSummary } from '../types/index.ts';
+import { DashboardSummary, Order, Customer, Delivery } from '../types/index.ts';
 import { Badge } from '../components/ui/Badge.tsx';
 import {
   DollarSign,
@@ -16,14 +16,82 @@ import {
   RefreshCw,
   Clock,
   CheckCircle,
+  ShoppingBag,
+  Trophy,
+  ChevronRight,
+  Flame,
 } from 'lucide-react';
 
 interface DashboardPageProps {
   onNavigate: (page: string) => void;
 }
 
+// Donut/Ring Chart for Real Order Status Distribution
+const OrderStatusDonutChart: React.FC<{
+  slices: { label: string; count: number; color: string; percentage: number }[];
+  total: number;
+}> = ({ slices, total }) => {
+  const size = 160;
+  const strokeWidth = 20;
+  const radius = (size - strokeWidth) / 2;
+  const center = size / 2;
+  const circumference = 2 * Math.PI * radius;
+
+  let accumulatedPercent = 0;
+
+  return (
+    <div className="relative flex items-center justify-center shrink-0">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="transform -rotate-90">
+        {/* Background Track */}
+        <circle
+          cx={center}
+          cy={center}
+          r={radius}
+          fill="transparent"
+          stroke="#f1f5f9"
+          strokeWidth={strokeWidth}
+        />
+        {total > 0 &&
+          slices.map((slice) => {
+            if (slice.count === 0) return null;
+            const strokeDasharray = `${(slice.percentage / 100) * circumference} ${circumference}`;
+            const strokeDashoffset = -((accumulatedPercent / 100) * circumference);
+            accumulatedPercent += slice.percentage;
+
+            return (
+              <circle
+                key={slice.label}
+                cx={center}
+                cy={center}
+                r={radius}
+                fill="transparent"
+                stroke={slice.color}
+                strokeWidth={strokeWidth}
+                strokeDasharray={strokeDasharray}
+                strokeDashoffset={strokeDashoffset}
+                strokeLinecap="round"
+                className="transition-all duration-500 ease-out"
+              />
+            );
+          })}
+      </svg>
+      {/* Center Total Count */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+        <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Total Orders</span>
+        <span className="text-2xl font-black text-slate-900 tracking-tight leading-none mt-1 tabular-nums">
+          {total}
+        </span>
+        <span className="text-[10px] font-medium text-slate-500 mt-0.5">Records</span>
+      </div>
+    </div>
+  );
+};
+
 export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   const [data, setData] = useState<DashboardSummary | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,8 +99,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get<DashboardSummary>('/dashboard/summary');
-      setData(res);
+      const [resSummary, resOrders, resDeliveries, resCustomers] = await Promise.all([
+        api.get<DashboardSummary>('/dashboard/summary'),
+        api.get<Order[]>('/orders'),
+        api.get<Delivery[]>('/deliveries'),
+        api.get<Customer[]>('/customers'),
+      ]);
+      setData(resSummary);
+      setOrders(resOrders || []);
+      setDeliveries(resDeliveries || []);
+      setCustomers(resCustomers || []);
     } catch (err: any) {
       setError(err.message || 'Failed to load dashboard data');
     } finally {
@@ -101,6 +177,124 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   } = data || ({} as any);
 
   const maxSalesTrend = Math.max(...(salesTrend || []).map((t) => t?.amount || 0), 1000);
+
+  // 1. ORDER STATUS AGGREGATION FROM REAL SUPABASE / DATABASE RECORDS
+  const orderStatusCounts = {
+    delivered: 0,
+    dispatched: 0,
+    confirmed: 0,
+    pending: 0,
+    cancelled: 0,
+  };
+
+  orders.forEach((o) => {
+    const del = deliveries.find((d) => d.order_id === o.id);
+    const delStatus = (del?.status || '').toLowerCase();
+    const st = (o.order_status || '').toLowerCase();
+
+    if (st === 'delivered' || st === 'completed' || delStatus === 'delivered') {
+      orderStatusCounts.delivered++;
+    } else if (
+      st === 'dispatched' ||
+      st === 'out_for_delivery' ||
+      delStatus === 'out_for_delivery' ||
+      delStatus === 'assigned'
+    ) {
+      orderStatusCounts.dispatched++;
+    } else if (st === 'cancelled') {
+      orderStatusCounts.cancelled++;
+    } else if (st === 'pending') {
+      orderStatusCounts.pending++;
+    } else {
+      orderStatusCounts.confirmed++;
+    }
+  });
+
+  const totalOrders = orders.length;
+
+  const orderStatusSlices = [
+    {
+      key: 'delivered',
+      label: 'Delivered',
+      count: orderStatusCounts.delivered,
+      color: '#10b981', // emerald-500
+      percentage: totalOrders > 0 ? (orderStatusCounts.delivered / totalOrders) * 100 : 0,
+    },
+    {
+      key: 'dispatched',
+      label: 'Out for Delivery / Dispatched',
+      count: orderStatusCounts.dispatched,
+      color: '#0ea5e9', // sky-500
+      percentage: totalOrders > 0 ? (orderStatusCounts.dispatched / totalOrders) * 100 : 0,
+    },
+    {
+      key: 'confirmed',
+      label: 'Confirmed',
+      count: orderStatusCounts.confirmed,
+      color: '#6366f1', // indigo-500
+      percentage: totalOrders > 0 ? (orderStatusCounts.confirmed / totalOrders) * 100 : 0,
+    },
+    {
+      key: 'pending',
+      label: 'Pending',
+      count: orderStatusCounts.pending,
+      color: '#f59e0b', // amber-500
+      percentage: totalOrders > 0 ? (orderStatusCounts.pending / totalOrders) * 100 : 0,
+    },
+    {
+      key: 'cancelled',
+      label: 'Cancelled',
+      count: orderStatusCounts.cancelled,
+      color: '#f43f5e', // rose-500
+      percentage: totalOrders > 0 ? (orderStatusCounts.cancelled / totalOrders) * 100 : 0,
+    },
+  ];
+
+  // 2. TOP CUSTOMERS (RANKED BY HIGHEST NUMBER OF REAL ORDERS)
+  const customerMap = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+      area: string;
+      phone: string;
+      orderCount: number;
+      totalBottles: number;
+      totalSpent: number;
+    }
+  >();
+
+  orders.forEach((o) => {
+    const custKey = o.customer_id || o.customer_name || 'unknown';
+    const cObj = customers.find((c) => c.id === o.customer_id);
+    const name = (o.customer_name || cObj?.name || 'Customer').replace(' (Temp)', '');
+    const area = o.customer_area || cObj?.area || 'Quetta';
+    const phone = o.customer_phone || cObj?.phone || '';
+
+    const itemsQty = (o.items || []).reduce(
+      (s: number, it: any) => s + (Number(it.quantity) || 0),
+      0
+    );
+    const existing = customerMap.get(custKey) || {
+      id: custKey,
+      name,
+      area,
+      phone,
+      orderCount: 0,
+      totalBottles: 0,
+      totalSpent: 0,
+    };
+    existing.orderCount += 1;
+    existing.totalBottles += itemsQty;
+    existing.totalSpent += Number(o.total_amount) || 0;
+    customerMap.set(custKey, existing);
+  });
+
+  const rankedCustomers = Array.from(customerMap.values())
+    .sort((a, b) => b.orderCount - a.orderCount || b.totalBottles - a.totalBottles)
+    .slice(0, 5);
+
+  const topOrderMax = rankedCustomers[0]?.orderCount || 1;
 
   return (
     <div className="space-y-6">
@@ -269,6 +463,195 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
             <div className="text-[11px] text-slate-400 mt-0.5">
               {kpis.deliveriesInTransit} in transit · {kpis.deliveriesPending} pending
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION: ORDER STATUS & TOP CUSTOMERS (CONNECTED TO REAL SUPABASE RECORDS) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* 1. ORDER STATUS DASHBOARD CARD */}
+        <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-sky-50 text-sky-600 rounded-md">
+                    <ShoppingBag className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-900 tracking-tight">Order Status</h3>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Real-time visual distribution across order lifecycle stages
+                </p>
+              </div>
+              <button
+                onClick={() => onNavigate('orders')}
+                className="text-xs text-sky-600 hover:text-sky-700 font-semibold inline-flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <span>Manage Orders</span>
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-6 my-3">
+              {/* Clean Donut / Ring Chart */}
+              <div className="shrink-0 flex items-center justify-center p-2">
+                <OrderStatusDonutChart slices={orderStatusSlices} total={totalOrders} />
+              </div>
+
+              {/* Status Breakdown Legend & Real Counts */}
+              <div className="flex-1 w-full space-y-2">
+                {orderStatusSlices.map((item) => (
+                  <div
+                    key={item.key}
+                    className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50/80 transition-colors border border-transparent hover:border-slate-100"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0 shadow-2xs"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      <span className="text-xs font-medium text-slate-700 truncate">{item.label}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs font-bold text-slate-900 tabular-nums">
+                        {item.count}
+                      </span>
+                      <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded tabular-nums min-w-[42px] text-right">
+                        {item.percentage.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Context Footer */}
+          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+            <span className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-slate-400" />
+              <span>
+                Active in pipeline:{' '}
+                <strong className="text-slate-800 tabular-nums">
+                  {orderStatusCounts.confirmed + orderStatusCounts.dispatched + orderStatusCounts.pending}
+                </strong>
+              </span>
+            </span>
+            <span className="text-emerald-700 font-medium flex items-center gap-1">
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+              <span>{orderStatusCounts.delivered} delivered</span>
+            </span>
+          </div>
+        </div>
+
+        {/* 2. TOP CUSTOMERS DASHBOARD CARD */}
+        <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-amber-50 text-amber-600 rounded-md">
+                    <Trophy className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-900 tracking-tight">Top Customers</h3>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Ranked by verified order volume from Supabase records
+                </p>
+              </div>
+              <button
+                onClick={() => onNavigate('customers')}
+                className="text-xs text-sky-600 hover:text-sky-700 font-semibold inline-flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <span>View All</span>
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {rankedCustomers.length === 0 ? (
+              <div className="py-10 text-center text-xs text-slate-400">
+                <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p>No customer order history recorded yet.</p>
+                <button
+                  onClick={() => onNavigate('orders')}
+                  className="mt-2 text-sky-600 hover:text-sky-700 font-semibold"
+                >
+                  Create first order
+                </button>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100 my-1">
+                {rankedCustomers.map((cust, idx) => {
+                  const rank = idx + 1;
+                  const pct = Math.min(100, Math.max(15, (cust.orderCount / topOrderMax) * 100));
+
+                  return (
+                    <div key={cust.id} className="py-2.5 flex items-center justify-between gap-3 group">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {/* Rank Badge */}
+                        <div
+                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                            rank === 1
+                              ? 'bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs'
+                              : rank === 2
+                              ? 'bg-slate-200 text-slate-700 border border-slate-300'
+                              : rank === 3
+                              ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                              : 'bg-slate-100 text-slate-500'
+                          }`}
+                        >
+                          {rank}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-slate-900 truncate flex items-center gap-1.5">
+                            <span>{cust.name}</span>
+                            {rank === 1 && (
+                              <span className="px-1.5 py-0.2 text-[9px] font-bold bg-amber-100 text-amber-800 rounded">
+                                Top Buyer
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                            <span>{cust.area}</span>
+                            {cust.phone && (
+                              <>
+                                <span className="mx-1 text-slate-300">·</span>
+                                <span className="font-mono text-[10px]">{cust.phone}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <div className="text-xs font-bold text-slate-900 tabular-nums">
+                          {cust.orderCount} {cust.orderCount === 1 ? 'order' : 'orders'}
+                        </div>
+                        <div className="text-[11px] text-sky-700 font-medium tabular-nums mt-0.5">
+                          {cust.totalBottles} bottles
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Context Footer */}
+          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+            <span>
+              Total Registered Customers:{' '}
+              <strong className="text-slate-800 tabular-nums">{customers.length}</strong>
+            </span>
+            <button
+              onClick={() => onNavigate('customers')}
+              className="text-sky-600 hover:text-sky-700 font-semibold cursor-pointer"
+            >
+              Open directory &rarr;
+            </button>
           </div>
         </div>
       </div>
@@ -459,26 +842,30 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
             </div>
 
             <div className="divide-y divide-slate-100">
-              {topDebtors.map((cust) => (
-                <div key={cust.id} className="py-2.5 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-xs font-semibold text-slate-900 truncate">{cust.name}</div>
-                    <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
-                      <span>{cust.area}</span>
-                      <span className="text-slate-300">·</span>
-                      <span className="font-medium text-sky-700">{cust.cans_held} cans held</span>
+              {topDebtors.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-400">No outstanding customer balances.</div>
+              ) : (
+                topDebtors.map((cust) => (
+                  <div key={cust.id} className="py-2.5 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-slate-900 truncate">{cust.name}</div>
+                      <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                        <span>{cust.area}</span>
+                        <span className="text-slate-300">·</span>
+                        <span className="font-medium text-sky-700">{cust.cans_held} cans held</span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-xs font-bold text-rose-600 tabular-nums">
+                        PKR {cust.outstanding_balance.toLocaleString()}
+                      </div>
+                      <div className="text-[10px] text-slate-500">
+                        Deposit: PKR {(cust.net_deposit_amount || 0).toLocaleString()}
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <div className="text-xs font-bold text-rose-600 tabular-nums">
-                      PKR {cust.outstanding_balance.toLocaleString()}
-                    </div>
-                    <div className="text-[10px] text-slate-500">
-                      Deposit: PKR {(cust.net_deposit_amount || 0).toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>

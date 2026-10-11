@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, type Request, type Response } from 'express';
 import {
   loadDatabase,
   saveDatabase,
@@ -391,6 +391,7 @@ apiRouter.get('/customers/types', (req: Request, res: Response) => {
 apiRouter.get('/customers', (req: Request, res: Response) => {
   const db = loadDatabase();
   const query = (req.query.search as string || '').toLowerCase().trim();
+  const areaFilter = (req.query.area as string || '').trim();
 
   let customers = db.customers;
   if (query) {
@@ -399,6 +400,21 @@ apiRouter.get('/customers', (req: Request, res: Response) => {
       c.phone.includes(query) ||
       (c.area && c.area.toLowerCase().includes(query))
     );
+  }
+  if (areaFilter) {
+    if (areaFilter === '__temporary__') {
+      const fixed = [
+        'Chiltan Scheme Airport Road',
+        'Nawa Killi Bypass',
+        'Main Jinnah Road',
+        'Quetta Avenue City',
+        'Hazara Town',
+        'Mariabad',
+      ];
+      customers = customers.filter(c => !fixed.includes(c.area));
+    } else {
+      customers = customers.filter(c => c.area === areaFilter);
+    }
   }
 
   return res.json(customers);
@@ -430,7 +446,7 @@ apiRouter.post('/customers', async (req: Request, res: Response) => {
       name: customerData.name || '',
       phone: customerData.phone || '',
       address: customerData.address || '',
-      area: customerData.area || 'Other',
+      area: customerData.area || 'Chiltan Scheme Airport Road',
       area_access: customerData.area_access || 'Specific Area',
       customer_type_id: customerData.customer_type_id || 'ct-home',
       customer_type_name: customerData.customer_type_name || 'Residential Home',
@@ -546,6 +562,25 @@ apiRouter.post('/products', async (req: Request, res: Response) => {
     };
 
     db.products.push(newProd);
+
+    // Also register inventory item for this product
+    const newInv: any = {
+      id: `inv-${Date.now()}`,
+      product_id: id,
+      product_name: newProd.name,
+      size: newProd.size,
+      unit: newProd.unit,
+      selling_price: newProd.selling_price,
+      cost_price: newProd.cost_price,
+      filled_stock: newProd.filled_stock || 0,
+      empty_cans: newProd.empty_cans || 0,
+      damaged_cans: 0,
+      lost_cans: 0,
+      is_reusable: newProd.is_reusable,
+      updated_at: new Date().toISOString(),
+    };
+    db.inventory.push(newInv);
+
     saveDatabase(db);
 
     const supabase = getServerSupabase();
@@ -697,7 +732,7 @@ apiRouter.post('/orders', async (req: Request, res: Response) => {
     const db = loadDatabase();
     const id = `ord-${Date.now()}`;
     const orderNumber = `ORD-${Date.now().toString().slice(-6)}`;
-    const cust = db.customers.find(c => c.id === orderData.customer_id);
+    const cust = db.customers.find(c => c.id === orderData.customer_id) || orderData.customer;
 
     const total_amount = (orderData.items || []).reduce(
       (s: number, it: any) => s + (Number(it.quantity || 0) * Number(it.unit_price || 0)),
@@ -708,9 +743,9 @@ apiRouter.post('/orders', async (req: Request, res: Response) => {
       id,
       order_number: orderNumber,
       customer_id: orderData.customer_id,
-      customer_name: cust?.name || '',
-      customer_phone: cust?.phone || '',
-      customer_area: cust?.area || '',
+      customer_name: cust?.name || orderData.customer_name || '',
+      customer_phone: cust?.phone || orderData.customer_phone || '',
+      customer_area: cust?.area || orderData.customer_area || '',
       total_amount,
       payment_type: orderData.payment_type || 'Cash',
       payment_status: 'pending',
@@ -757,7 +792,38 @@ apiRouter.post('/orders', async (req: Request, res: Response) => {
 
 apiRouter.get('/deliveries', (req: Request, res: Response) => {
   const db = loadDatabase();
-  return res.json(db.deliveries);
+  const areaFilter = (req.query.area as string || '').trim();
+  const statusFilter = (req.query.status as string || '').trim();
+  const driverFilter = (req.query.driverId as string || '').trim();
+  const dateFilter = (req.query.date as string || '').trim();
+
+  let deliveries = db.deliveries;
+  if (statusFilter) {
+    deliveries = deliveries.filter(d => d.status === statusFilter);
+  }
+  if (driverFilter) {
+    deliveries = deliveries.filter(d => d.driver_id === driverFilter);
+  }
+  if (dateFilter) {
+    deliveries = deliveries.filter(d => d.scheduled_date === dateFilter);
+  }
+  if (areaFilter) {
+    if (areaFilter === '__temporary__') {
+      const fixed = [
+        'Chiltan Scheme Airport Road',
+        'Nawa Killi Bypass',
+        'Main Jinnah Road',
+        'Quetta Avenue City',
+        'Hazara Town',
+        'Mariabad',
+      ];
+      deliveries = deliveries.filter(d => !fixed.includes(d.customer_area || ''));
+    } else {
+      deliveries = deliveries.filter(d => d.customer_area === areaFilter);
+    }
+  }
+
+  return res.json(deliveries);
 });
 
 apiRouter.post('/deliveries/create-for-order', async (req: Request, res: Response) => {
@@ -775,10 +841,10 @@ apiRouter.post('/deliveries/create-for-order', async (req: Request, res: Respons
       delivery_number: deliveryNumber,
       order_id: params.order_id,
       customer_id: ord?.customer_id || '',
-      customer_name: cust?.name || '',
-      customer_phone: cust?.phone || '',
-      customer_address: cust?.address || '',
-      customer_area: cust?.area || '',
+      customer_name: cust?.name || ord?.customer_name || '',
+      customer_phone: cust?.phone || ord?.customer_phone || '',
+      customer_address: cust?.address || ord?.delivery_address || '',
+      customer_area: cust?.area || ord?.customer_area || '',
       driver_id: params.driver_id,
       driver_name: driver?.name || 'Driver',
       vehicle: params.vehicle || 'Van #1',
@@ -901,13 +967,13 @@ apiRouter.put('/deliveries/:id/status', async (req: Request, res: Response) => {
 
 apiRouter.get('/cans/summary', (req: Request, res: Response) => {
   const db = loadDatabase();
-  const inv = db.inventory.find(i => i.product_id === 'prod-19l-can');
+  const invList = db.inventory;
 
-  const emptyInWarehouse = inv?.empty_cans || 280;
-  const filledInWarehouse = inv?.filled_stock || 350;
+  const emptyInWarehouse = invList.reduce((s, i) => s + (Number(i.empty_cans) || 0), 0);
+  const filledInWarehouse = invList.reduce((s, i) => s + (Number(i.filled_stock) || 0), 0);
   const withCustomers = db.customers.reduce((s, c) => s + (Number(c.cans_held) || 0), 0);
-  const damagedCans = inv?.damaged_cans || 5;
-  const lostCans = inv?.lost_cans || 2;
+  const damagedCans = invList.reduce((s, i) => s + (Number(i.damaged_cans) || 0), 0);
+  const lostCans = invList.reduce((s, i) => s + (Number(i.lost_cans) || 0), 0);
   const totalCompanyCans = emptyInWarehouse + filledInWarehouse + withCustomers + damagedCans + lostCans;
 
   const customerRankings = db.customers.slice().sort((a, b) => (b.cans_held || 0) - (a.cans_held || 0));
@@ -1095,8 +1161,8 @@ apiRouter.post('/suppliers', async (req: Request, res: Response) => {
 
 apiRouter.get('/reports/financial', (req: Request, res: Response) => {
   const db = loadDatabase();
-  const totalRevenue = db.payments.reduce((s, p) => s + (Number(p.amount) || 0), 0) || 185400;
-  const totalExpenses = db.expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0) || 72100;
+  const totalRevenue = db.payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const totalExpenses = db.expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
   const netProfit = totalRevenue - totalExpenses;
 
   return res.json({
@@ -1108,30 +1174,59 @@ apiRouter.get('/reports/financial', (req: Request, res: Response) => {
 });
 
 apiRouter.get('/reports/sales', (req: Request, res: Response) => {
+  const db = loadDatabase();
+  const monthMap = new Map<string, { total: number; count: number }>();
+  const productMap = new Map<string, { name: string; quantity: number; revenue: number }>();
+
+  db.orders.forEach((o: any) => {
+    const monthKey = o.created_at ? new Date(o.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Recent';
+    const current = monthMap.get(monthKey) || { total: 0, count: 0 };
+    current.total += Number(o.total_amount) || 0;
+    current.count += 1;
+    monthMap.set(monthKey, current);
+
+    (o.items || []).forEach((item: any) => {
+      const prodName = item.product_name || 'Bottle';
+      const pEntry = productMap.get(prodName) || { name: prodName, quantity: 0, revenue: 0 };
+      pEntry.quantity += Number(item.quantity) || 0;
+      pEntry.revenue += Number(item.total_price || (item.unit_price * item.quantity)) || 0;
+      productMap.set(prodName, pEntry);
+    });
+  });
+
+  const monthlySales = Array.from(monthMap.entries()).map(([month, data]) => ({
+    month,
+    total: data.total,
+    count: data.count,
+  }));
+
+  const productBreakdown = Array.from(productMap.values());
+
   return res.json({
-    monthlySales: [
-      { month: 'Oct 2026', total: 185400, count: 620 },
-    ],
-    productBreakdown: [
-      { name: '19L Premium Can', quantity: 580, revenue: 127600 },
-      { name: '1.5L Pack of 6', quantity: 95, revenue: 34200 },
-      { name: '500ml Pack of 12', quantity: 45, revenue: 23600 },
-    ],
+    monthlySales,
+    productBreakdown,
   });
 });
 
 apiRouter.get('/reports/deliveries', (req: Request, res: Response) => {
   const db = loadDatabase();
+  const totalDeliveries = db.deliveries.length;
+  const delivered = db.deliveries.filter(d => d.status === 'delivered').length;
+  const onTimeRate = totalDeliveries > 0 ? `${Math.round((delivered / totalDeliveries) * 100)}%` : '0%';
+  const cansReturned = db.customer_can_movements
+    ? db.customer_can_movements.filter(m => m.movement_type === 'returned').reduce((s, m) => s + (Number(m.quantity) || 0), 0)
+    : 0;
+
   return res.json({
-    totalDeliveries: db.deliveries.length || 48,
-    onTimeRate: '96%',
-    cansReturned: 42,
+    totalDeliveries,
+    onTimeRate,
+    cansReturned,
   });
 });
 
 apiRouter.get('/dashboard/summary', (req: Request, res: Response) => {
   const db = loadDatabase();
-  const inv = db.inventory.find(i => i.product_id === 'prod-19l-can');
+  const invList = db.inventory;
   const withCustomers = db.customers.reduce((s, c) => s + (Number(c.cans_held) || 0), 0);
   const totalReceivables = db.customers.reduce((s, c) => s + (Number(c.outstanding_balance) || 0), 0);
 
@@ -1139,41 +1234,70 @@ apiRouter.get('/dashboard/summary', (req: Request, res: Response) => {
   const deliveriesInTransit = db.deliveries.filter(d => d.status === 'out_for_delivery' || d.status === 'assigned').length;
   const deliveriesPending = db.deliveries.filter(d => d.status === 'assigned' || d.status === 'rescheduled').length;
 
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayOrders = db.orders.filter(o => o.created_at && o.created_at.slice(0, 10) === todayStr);
+  const todaySales = todayOrders.reduce((s, o) => s + (Number(o.total_amount) || 0), 0);
+
+  const todayPayments = db.payments.filter(p => p.created_at && p.created_at.slice(0, 10) === todayStr);
+  const todayCollections = todayPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+
+  const todayExpensesList = db.expenses.filter(e => (e.date && e.date.slice(0, 10) === todayStr) || (e.created_at && e.created_at.slice(0, 10) === todayStr));
+  const todayExpenses = todayExpensesList.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+
+  const currentMonthStr = new Date().toISOString().slice(0, 7);
+  const monthOrders = db.orders.filter(o => o.created_at && o.created_at.slice(0, 7) === currentMonthStr);
+  const monthlyRevenue = monthOrders.reduce((s, o) => s + (Number(o.total_amount) || 0), 0);
+
+  const monthExpensesList = db.expenses.filter(e => (e.date && e.date.slice(0, 7) === currentMonthStr) || (e.created_at && e.created_at.slice(0, 7) === currentMonthStr));
+  const monthlyExpenses = monthExpensesList.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  const monthlyProfit = monthlyRevenue - monthlyExpenses;
+
+  // Actual inventory stock
+  const filledStock = invList.reduce((s, i) => s + (Number(i.filled_stock) || 0), 0) || db.products.reduce((s, p) => s + (Number(p.filled_stock) || 0), 0);
+  const emptyCansStock = invList.reduce((s, i) => s + (Number(i.empty_cans) || 0), 0) || db.products.reduce((s, p) => s + (Number(p.empty_cans) || 0), 0);
+
+  // 7-day sales trend from real records
+  const days: { day: string; amount: number }[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().slice(0, 10);
+    const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+    const daySales = db.orders
+      .filter(o => o.created_at && o.created_at.slice(0, 10) === dateStr)
+      .reduce((s, o) => s + (Number(o.total_amount) || 0), 0);
+    days.push({ day: dayName, amount: daySales });
+  }
+
   return res.json({
     kpis: {
-      todaySales: 18400,
-      todayCollections: 16200,
-      todayExpenses: 4800,
+      todaySales,
+      todayCollections,
+      todayExpenses,
       totalReceivables,
-      filledStock: inv?.filled_stock || 350,
-      emptyCansStock: inv?.empty_cans || 280,
-      cansWithCustomers: withCustomers || 210,
+      filledStock,
+      emptyCansStock,
+      cansWithCustomers: withCustomers,
       deliveriesToday: db.deliveries.length,
       deliveriesDelivered,
       deliveriesInTransit,
       deliveriesPending,
-      monthlyRevenue: 185400,
-      monthlyExpenses: 72100,
-      monthlyProfit: 113300,
+      monthlyRevenue,
+      monthlyExpenses,
+      monthlyProfit,
     },
     recentDeliveries: db.deliveries.slice(0, 5),
     recentOrders: db.orders.slice(0, 5),
-    lowStock: db.products.map(p => ({
-      name: p.name,
-      size: p.size,
-      filled_stock: p.filled_stock || 150,
-      empty_cans: p.empty_cans || 80,
-    })),
-    topDebtors: db.customers.filter(c => (c.outstanding_balance || 0) > 0).slice(0, 5),
-    salesTrend: [
-      { day: 'Mon', amount: 15400 },
-      { day: 'Tue', amount: 18200 },
-      { day: 'Wed', amount: 22100 },
-      { day: 'Thu', amount: 19800 },
-      { day: 'Fri', amount: 24500 },
-      { day: 'Sat', amount: 21300 },
-      { day: 'Sun', amount: 16900 },
-    ],
+    lowStock: db.products
+      .filter(p => (Number(p.filled_stock) || 0) < 10 && db.products.length > 0)
+      .map(p => ({
+        name: p.name,
+        size: p.size,
+        filled_stock: Number(p.filled_stock) || 0,
+        empty_cans: Number(p.empty_cans) || 0,
+      })),
+    topDebtors: db.customers.filter(c => (Number(c.outstanding_balance) || 0) > 0).slice(0, 5),
+    salesTrend: days,
   });
 });
 

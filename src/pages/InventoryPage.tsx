@@ -171,7 +171,9 @@ export const InventoryPage: React.FC = () => {
                 ) : inventory.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
-                      No inventory records found.
+                      <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                      <p className="font-medium text-slate-500">No inventory records yet</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Warehouse inventory tracks finished stock and empty cans when products are cataloged.</p>
                     </td>
                   </tr>
                 ) : (

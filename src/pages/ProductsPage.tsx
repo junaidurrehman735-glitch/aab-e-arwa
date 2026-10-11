@@ -117,61 +117,80 @@ export const ProductsPage: React.FC = () => {
       </div>
 
       {/* Product Cards / Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {products.map((p) => (
-          <div
-            key={p.id}
-            className="bg-white rounded-xl border border-slate-200/80 shadow-xs p-5 flex flex-col justify-between hover:border-slate-300 transition-colors"
-          >
-            <div>
-              <div className="flex items-start justify-between gap-2 mb-3">
-                <div className="w-10 h-10 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
-                  <Package className="w-5 h-5" />
+      {products.length === 0 ? (
+        <div className="bg-white rounded-xl border border-slate-200/80 p-12 text-center shadow-xs">
+          <Package className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+          <h3 className="text-base font-bold text-slate-800">No products yet</h3>
+          <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1 mb-5">
+            Your bottle and product catalog is empty. Add your 19L cans or mineral water bottles to start taking orders.
+          </p>
+          {hasPermission('products', 'can_create') && (
+            <button
+              onClick={openAdd}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shadow-xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add First Product</span>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {products.map((p) => (
+            <div
+              key={p.id}
+              className="bg-white rounded-xl border border-slate-200/80 shadow-xs p-5 flex flex-col justify-between hover:border-slate-300 transition-colors"
+            >
+              <div>
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="w-10 h-10 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
+                    <Package className="w-5 h-5" />
+                  </div>
+                  <Badge variant={p.is_reusable ? 'info' : 'neutral'}>
+                    {p.is_reusable ? 'Reusable Can' : 'Disposable Pack'}
+                  </Badge>
                 </div>
-                <Badge variant={p.is_reusable ? 'info' : 'neutral'}>
-                  {p.is_reusable ? 'Reusable Can' : 'Disposable Pack'}
-                </Badge>
+
+                <h3 className="text-sm font-bold text-slate-900 leading-snug">{p.name}</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Size: {p.size} · Unit: {p.unit}</p>
+
+                <div className="mt-4 pt-3 border-t border-slate-100 space-y-1.5">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">Retail Rate:</span>
+                    <span className="font-bold text-slate-900 tabular-nums">PKR {p.selling_price}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">Unit Cost:</span>
+                    <span className="text-slate-600 tabular-nums">PKR {p.cost_price}</span>
+                  </div>
+                  <div className="flex justify-between text-xs pt-1 border-t border-slate-50">
+                    <span className="text-slate-500">Margin / Unit:</span>
+                    <span className="font-semibold text-emerald-600 tabular-nums">
+                      PKR {p.selling_price - p.cost_price}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              <h3 className="text-sm font-bold text-slate-900 leading-snug">{p.name}</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Size: {p.size} · Unit: {p.unit}</p>
+              <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between">
+                <div className="text-[11px] text-slate-500">
+                  Stock: <strong className="text-slate-800">{p.filled_stock || 0}</strong> in plant
+                </div>
 
-              <div className="mt-4 pt-3 border-t border-slate-100 space-y-1.5">
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">Retail Rate:</span>
-                  <span className="font-bold text-slate-900 tabular-nums">PKR {p.selling_price}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">Unit Cost:</span>
-                  <span className="text-slate-600 tabular-nums">PKR {p.cost_price}</span>
-                </div>
-                <div className="flex justify-between text-xs pt-1 border-t border-slate-50">
-                  <span className="text-slate-500">Margin / Unit:</span>
-                  <span className="font-semibold text-emerald-600 tabular-nums">
-                    PKR {p.selling_price - p.cost_price}
-                  </span>
-                </div>
+                {hasPermission('products', 'can_edit') && (
+                  <button
+                    onClick={() => openEdit(p)}
+                    className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
+                    title="Edit Product"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
-
-            <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between">
-              <div className="text-[11px] text-slate-500">
-                Stock: <strong className="text-slate-800">{p.filled_stock || 0}</strong> in plant
-              </div>
-
-              {hasPermission('products', 'can_edit') && (
-                <button
-                  onClick={() => openEdit(p)}
-                  className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
-                  title="Edit Product"
-                >
-                  <Edit2 className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* PRODUCT FORM MODAL */}
       <Modal

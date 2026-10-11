@@ -29,15 +29,18 @@ export interface CustomerType {
   default_discount: number;
 }
 
-export const APPROVED_DELIVERY_AREAS = [
+export const FIXED_DELIVERY_AREAS = [
   'Chiltan Scheme Airport Road',
   'Nawa Killi Bypass',
   'Main Jinnah Road',
   'Quetta Avenue City',
-  'Other',
+  'Hazara Town',
+  'Mariabad',
 ] as const;
 
-export type DeliveryArea = typeof APPROVED_DELIVERY_AREAS[number];
+export const APPROVED_DELIVERY_AREAS = FIXED_DELIVERY_AREAS;
+
+export type DeliveryArea = typeof FIXED_DELIVERY_AREAS[number] | string;
 
 export const APPROVED_CUSTOMER_TYPES = [
   'Residential Home',
@@ -76,9 +79,10 @@ export const CASH_STATUSES = [
   'Cash on Delivery',
   'Paid',
   'Pending',
+  'Credit Account',
 ] as const;
 
-export type CashStatus = typeof CASH_STATUSES[number];
+export type CashStatus = typeof CASH_STATUSES[number] | string;
 
 export interface Customer {
   id: string;
@@ -93,7 +97,7 @@ export interface Customer {
   customer_type_name?: string;
   selling_rate: number; // Agreed Selling Rate (PKR)
   payment_type: 'Cash' | 'Credit';
-  cash_status: 'Cash on Delivery' | 'Paid' | 'Pending';
+  cash_status: 'Cash on Delivery' | 'Paid' | 'Pending' | 'Credit Account' | string;
   credit_limit?: number;
   outstanding_balance: number;
   cans_held: number; // Company Cans With Customer

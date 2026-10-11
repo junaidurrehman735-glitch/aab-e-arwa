@@ -78,6 +78,8 @@ export const CustomersPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'ledger' | 'cans' | 'orders' | 'payments'>('ledger');
 
   // Form states - strict adherence to updated fields
+  const [isCustomArea, setIsCustomArea] = useState(false);
+  const [customAreaName, setCustomAreaName] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -153,8 +155,18 @@ export const CustomersPage: React.FC = () => {
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const effectiveArea = isCustomArea
+        ? customAreaName.trim()
+        : (formData.area || APPROVED_DELIVERY_AREAS[0]);
+
+      if (isCustomArea && !effectiveArea) {
+        toast.error('Please enter a temporary area name (e.g. Alamabad)');
+        return;
+      }
+
       await api.post('/customers', {
         ...formData,
+        area: effectiveArea,
         cans_held: Number(formData.company_cans) || 0,
         net_deposit_amount: Number(formData.net_deposit_amount) || 0,
         selling_rate: Number(formData.selling_rate) || 0,
@@ -172,8 +184,18 @@ export const CustomersPage: React.FC = () => {
     e.preventDefault();
     if (!selectedCustomer) return;
     try {
+      const effectiveArea = isCustomArea
+        ? customAreaName.trim()
+        : (formData.area || APPROVED_DELIVERY_AREAS[0]);
+
+      if (isCustomArea && !effectiveArea) {
+        toast.error('Please enter a temporary area name (e.g. Alamabad)');
+        return;
+      }
+
       await api.put(`/customers/${selectedCustomer.id}`, {
         ...formData,
+        area: effectiveArea,
         cans_held: Number(formData.company_cans) || 0,
         net_deposit_amount: Number(formData.net_deposit_amount) || 0,
         selling_rate: Number(formData.selling_rate) || 0,
@@ -185,6 +207,7 @@ export const CustomersPage: React.FC = () => {
         viewCustomerDetails({
           ...selectedCustomer,
           ...formData,
+          area: effectiveArea,
           cans_held: Number(formData.company_cans) || 0,
           net_deposit_amount: Number(formData.net_deposit_amount) || 0,
           selling_rate: Number(formData.selling_rate) || 0,
@@ -258,6 +281,8 @@ export const CustomersPage: React.FC = () => {
   };
 
   const resetForm = () => {
+    setIsCustomArea(false);
+    setCustomAreaName('');
     setFormData({
       name: '',
       phone: '',
@@ -283,11 +308,19 @@ export const CustomersPage: React.FC = () => {
     const matchedType = types.find(
       (t) => t.id === cust.customer_type_id || t.name === legacyTypeName
     );
+    const isFixed = APPROVED_DELIVERY_AREAS.includes(cust.area as any);
+    if (isFixed) {
+      setIsCustomArea(false);
+      setCustomAreaName('');
+    } else {
+      setIsCustomArea(true);
+      setCustomAreaName(cust.area || '');
+    }
     setFormData({
       name: cust.name,
       phone: cust.phone,
       address: cust.address,
-      area: APPROVED_DELIVERY_AREAS.includes(cust.area as any) ? cust.area : APPROVED_DELIVERY_AREAS[0],
+      area: cust.area || APPROVED_DELIVERY_AREAS[0],
       customer_type_id: matchedType?.id || CUSTOMER_TYPE_IDS[legacyTypeName || 'Other'],
       selling_rate: cust.selling_rate > 0 ? String(cust.selling_rate) : '',
       cash_status: (cust.cash_status as CashStatus) || 'Cash on Delivery',
@@ -375,6 +408,7 @@ export const CustomersPage: React.FC = () => {
               {a}
             </option>
           ))}
+          <option value="__temporary__">Temporary / Other Areas</option>
         </select>
 
         {/* Customer Type Filter - ONLY the approved customer types */}
@@ -433,7 +467,9 @@ export const CustomersPage: React.FC = () => {
               ) : customers.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
-                    No customers found matching filter criteria.
+                    <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="font-medium text-slate-500">No customers yet</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Click "Add New Customer" above to register your first customer.</p>
                   </td>
                 </tr>
               ) : (
@@ -587,21 +623,68 @@ export const CustomersPage: React.FC = () => {
               />
             </div>
 
-            {/* B. DELIVERY AREA / SECTOR * - ONLY the 5 approved options */}
+            {/* B. DELIVERY AREA / SECTOR * - Fixed areas + Temporary Area */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Delivery Area / Sector *</label>
-              <select
-                required
-                value={formData.area}
-                onChange={(e) => setFormData({ ...formData, area: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500 font-medium"
-              >
-                {APPROVED_DELIVERY_AREAS.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700">Delivery Area / Sector *</label>
+                {isCustomArea && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomArea(false);
+                      setCustomAreaName('');
+                      setFormData((prev) => ({ ...prev, area: APPROVED_DELIVERY_AREAS[0] }));
+                    }}
+                    className="text-[11px] text-sky-600 hover:text-sky-800 font-medium cursor-pointer"
+                  >
+                    Select fixed area
+                  </button>
+                )}
+              </div>
+
+              {!isCustomArea ? (
+                <select
+                  required
+                  value={formData.area}
+                  onChange={(e) => {
+                    if (e.target.value === '__add_temporary__') {
+                      setIsCustomArea(true);
+                      setCustomAreaName('');
+                      setFormData((prev) => ({ ...prev, area: '' }));
+                    } else {
+                      setFormData((prev) => ({ ...prev, area: e.target.value }));
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500 font-medium"
+                >
+                  {APPROVED_DELIVERY_AREAS.map((a) => (
+                    <option key={a} value={a}>
+                      {a}
+                    </option>
+                  ))}
+                  <option value="__add_temporary__" className="text-sky-600 font-semibold">
+                    + Add Temporary Area
                   </option>
-                ))}
-              </select>
+                </select>
+              ) : (
+                <div className="space-y-1.5">
+                  <input
+                    type="text"
+                    required
+                    value={customAreaName}
+                    onChange={(e) => {
+                      setCustomAreaName(e.target.value);
+                      setFormData((prev) => ({ ...prev, area: e.target.value }));
+                    }}
+                    placeholder="Enter temporary area name (e.g. Alamabad)"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-sky-300 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-sky-500 font-medium"
+                    autoFocus
+                  />
+                  <p className="text-[10px] text-slate-500 leading-tight">
+                    Temporary area: saved only for this customer and not added to the main Delivery Area dropdown.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* A. CUSTOMER TYPE - Residential Home, Restaurant, Office, Shop, Other */}
@@ -761,21 +844,68 @@ export const CustomersPage: React.FC = () => {
               />
             </div>
 
-            {/* B. DELIVERY AREA / SECTOR * - ONLY the 5 approved options */}
+            {/* B. DELIVERY AREA / SECTOR * - Fixed areas + Temporary Area */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Delivery Area / Sector *</label>
-              <select
-                required
-                value={formData.area}
-                onChange={(e) => setFormData({ ...formData, area: e.target.value })}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500 font-medium"
-              >
-                {APPROVED_DELIVERY_AREAS.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700">Delivery Area / Sector *</label>
+                {isCustomArea && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomArea(false);
+                      setCustomAreaName('');
+                      setFormData((prev) => ({ ...prev, area: APPROVED_DELIVERY_AREAS[0] }));
+                    }}
+                    className="text-[11px] text-sky-600 hover:text-sky-800 font-medium cursor-pointer"
+                  >
+                    Select fixed area
+                  </button>
+                )}
+              </div>
+
+              {!isCustomArea ? (
+                <select
+                  required
+                  value={formData.area}
+                  onChange={(e) => {
+                    if (e.target.value === '__add_temporary__') {
+                      setIsCustomArea(true);
+                      setCustomAreaName('');
+                      setFormData((prev) => ({ ...prev, area: '' }));
+                    } else {
+                      setFormData((prev) => ({ ...prev, area: e.target.value }));
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500 font-medium"
+                >
+                  {APPROVED_DELIVERY_AREAS.map((a) => (
+                    <option key={a} value={a}>
+                      {a}
+                    </option>
+                  ))}
+                  <option value="__add_temporary__" className="text-sky-600 font-semibold">
+                    + Add Temporary Area
                   </option>
-                ))}
-              </select>
+                </select>
+              ) : (
+                <div className="space-y-1.5">
+                  <input
+                    type="text"
+                    required
+                    value={customAreaName}
+                    onChange={(e) => {
+                      setCustomAreaName(e.target.value);
+                      setFormData((prev) => ({ ...prev, area: e.target.value }));
+                    }}
+                    placeholder="Enter temporary area name (e.g. Alamabad)"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-sky-300 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-sky-500 font-medium"
+                    autoFocus
+                  />
+                  <p className="text-[10px] text-slate-500 leading-tight">
+                    Temporary area: saved only for this customer and not added to the main Delivery Area dropdown.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* A. CUSTOMER TYPE */}

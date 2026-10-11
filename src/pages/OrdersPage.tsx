@@ -12,6 +12,7 @@ import {
 import { useAuth } from '../context/AuthContext.tsx';
 import { useToast } from '../context/ToastContext.tsx';
 import { Modal } from '../components/ui/Modal.tsx';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog.tsx';
 import { Badge } from '../components/ui/Badge.tsx';
 import {
   ShoppingBag,
@@ -70,6 +71,23 @@ export const OrdersPage: React.FC = () => {
     vehicle: 'Suzuki APV (LEA-819)',
     delivery_time: '10:00 AM',
   });
+
+  // Delete Order State
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
+
+  const handleDeleteOrder = async () => {
+    if (!orderToDelete) return;
+    try {
+      await api.delete(`/orders/${orderToDelete.id}`);
+      toast.success(`Order #${orderToDelete.order_number} deleted from Supabase`);
+      setIsDeleteModalOpen(false);
+      setOrderToDelete(null);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete order');
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -526,6 +544,19 @@ export const OrdersPage: React.FC = () => {
                           >
                             <Truck className="w-3 h-3" />
                             <span>Dispatch</span>
+                          </button>
+                        )}
+
+                        {hasPermission('orders', 'can_delete') && (
+                          <button
+                            onClick={() => {
+                              setOrderToDelete(ord);
+                              setIsDeleteModalOpen(true);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                            title="Delete Order"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         )}
                       </div>
@@ -1291,7 +1322,7 @@ export const OrdersPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsDispatchModalOpen(false)}
-              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg"
+              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg cursor-pointer"
             >
               Cancel
             </button>
@@ -1304,6 +1335,20 @@ export const OrdersPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* CONFIRM DELETE ORDER DIALOG */}
+      <ConfirmDialog
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={handleDeleteOrder}
+        title="Delete Order"
+        message={
+          orderToDelete
+            ? `Are you sure you want to delete Order #${orderToDelete.order_number}? This will permanently remove the order and its linked delivery route from Supabase.`
+            : ''
+        }
+        confirmLabel="Delete Order"
+      />
     </div>
   );
 };

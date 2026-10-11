@@ -269,15 +269,21 @@ export const CustomersPage: React.FC = () => {
   const handleDeleteCustomer = async () => {
     if (!selectedCustomer) return;
     try {
-      await api.delete(`/customers/${selectedCustomer.id}`);
-      toast.success('Customer deleted successfully from Supabase');
+      const res = await api.delete<{ success: boolean; archived?: boolean; message?: string }>(
+        `/customers/${selectedCustomer.id}`
+      );
+      if (res?.archived) {
+        toast.info(res.message || 'Customer has historical records and was safely archived.');
+      } else {
+        toast.success(res?.message || 'Customer profile removed successfully from Supabase');
+      }
       setIsDeleteConfirmOpen(false);
       setIsDetailsModalOpen(false);
       setSelectedCustomer(null);
       await fetchCustomers();
     } catch (err: any) {
       console.error('[Delete Customer Error]:', err);
-      toast.error(err.message || 'Failed to delete customer');
+      toast.error(err.message || 'Failed to remove customer');
     }
   };
 
@@ -634,6 +640,18 @@ export const CustomersPage: React.FC = () => {
                             title="Edit Customer Profile"
                           >
                             <Edit2 className="w-4 h-4" />
+                          </button>
+                        )}
+                        {hasPermission('customers', 'can_delete') && (
+                          <button
+                            onClick={() => {
+                              setSelectedCustomer(cust);
+                              setIsDeleteConfirmOpen(true);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                            title="Delete / Remove Customer"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         )}
                       </div>
@@ -1645,13 +1663,13 @@ export const CustomersPage: React.FC = () => {
         isOpen={isDeleteConfirmOpen}
         onClose={() => setIsDeleteConfirmOpen(false)}
         onConfirm={handleDeleteCustomer}
-        title="Delete Customer Profile"
+        title="Remove Customer Profile"
         message={
           selectedCustomer
-            ? `Are you sure you want to delete ${selectedCustomer.name}? This operation is irreversible. (Note: cannot delete if balance or company cans are held).`
+            ? `Are you sure you want to remove this customer (${selectedCustomer.name})? If this customer has existing orders or transactions, their account will be safely archived to preserve financial records.`
             : ''
         }
-        confirmLabel="Delete Customer"
+        confirmLabel="Remove Customer"
       />
     </div>
   );

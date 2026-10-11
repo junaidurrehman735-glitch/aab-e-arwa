@@ -1216,9 +1216,13 @@ export const SupabaseDataService = {
     };
 
     if (supabase) {
-      await supabase.from('orders').insert(newOrder);
+      const { error: ordErr } = await supabase.from('orders').insert(newOrder);
+      if (ordErr) {
+        throw new Error(ordErr.message);
+      }
       for (const it of orderData.items) {
         await supabase.from('order_items').insert({
+          id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           order_id: id,
           product_id: it.product_id,
           quantity: it.quantity,
@@ -1226,6 +1230,21 @@ export const SupabaseDataService = {
           total_price: it.quantity * it.unit_price,
         });
       }
+      // Auto-create delivery record
+      const delId = `del-${Date.now()}`;
+      await supabase.from('deliveries').insert({
+        id: delId,
+        delivery_number: `DEL-${Date.now().toString().slice(-6)}`,
+        order_id: id,
+        customer_id: orderData.customer_id,
+        vehicle: 'Van #1',
+        delivery_date: orderData.delivery_date,
+        delivery_time: 'Morning',
+        status: 'assigned',
+        empty_cans_returned: 0,
+        payment_collected: 0,
+        payment_method: orderData.payment_type || 'Cash',
+      });
     }
 
     const current = getMem('orders');

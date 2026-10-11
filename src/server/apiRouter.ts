@@ -436,6 +436,14 @@ apiRouter.get('/customers', async (req: Request, res: Response) => {
     customers = db.customers || [];
   }
 
+  // Filter out archived/inactive customers from active management list by default
+  const statusParam = (req.query.status as string || '').trim();
+  if (statusParam) {
+    customers = customers.filter(c => (c.status as string) === statusParam);
+  } else {
+    customers = customers.filter(c => (c.status as string) !== 'inactive' && (c.status as string) !== 'archived');
+  }
+
   // Apply filters to real fetched records
   if (query) {
     customers = customers.filter(c =>
@@ -619,31 +627,67 @@ apiRouter.put('/customers/:id', async (req: Request, res: Response) => {
 apiRouter.delete('/customers/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-
-    // 1. Always delete from server central database
-    const db = loadDatabase();
-    db.customers = db.customers.filter(c => c.id !== id);
-    saveDatabase(db);
-
-    // 2. Also sync to Supabase if configured
     const supabase = getServerSupabase();
+    let isArchived = false;
+
     if (supabase) {
-      try {
-        const { error } = await supabase.from('customers').delete().eq('id', id);
-        if (error) {
-          console.warn('[API /customers/:id] Supabase DELETE notice (deleted in central DB):', error.message || error);
-        } else {
-          console.log(`[CUSTOMER] Deleted & verified in Supabase: (${id})`);
+      // Check if customer has historical records: orders, deliveries, payments, or ledger
+      const [ordRes, delRes, payRes, ledgRes] = await Promise.all([
+        supabase.from('orders').select('id').eq('customer_id', id).limit(1),
+        supabase.from('deliveries').select('id').eq('customer_id', id).limit(1),
+        supabase.from('payments').select('id').eq('customer_id', id).limit(1),
+        supabase.from('customer_ledger').select('id').eq('customer_id', id).limit(1),
+      ]);
+
+      const hasHistory =
+        (ordRes.data && ordRes.data.length > 0) ||
+        (delRes.data && delRes.data.length > 0) ||
+        (payRes.data && payRes.data.length > 0) ||
+        (ledgRes.data && ledgRes.data.length > 0);
+
+      if (hasHistory) {
+        // Safe archive: set status to inactive in Supabase so historical financial integrity is preserved
+        const { error: archErr } = await supabase
+          .from('customers')
+          .update({ status: 'inactive', updated_at: new Date().toISOString() })
+          .eq('id', id);
+
+        if (archErr) {
+          console.error('[API /customers/:id] Archive error:', archErr.message);
+          return res.status(500).json({ message: archErr.message });
         }
-      } catch (err: any) {
-        console.warn('[API /customers/:id] Supabase DELETE exception:', err?.message || err);
+        isArchived = true;
+        console.log(`[CUSTOMER] Safely ARCHIVED in Supabase (historical records preserved): (${id})`);
+      } else {
+        // No historical linkage: permanent delete from Supabase
+        const { error: delErr } = await supabase.from('customers').delete().eq('id', id);
+        if (delErr) {
+          console.error('[API /customers/:id] Delete error:', delErr.message);
+          return res.status(500).json({ message: delErr.message });
+        }
+        console.log(`[CUSTOMER] Permanently DELETED from Supabase: (${id})`);
       }
     }
 
-    console.log(`[CUSTOMER] Deleted from central DB: (${id})`);
-    return res.json({ success: true });
+    // Update central database
+    const db = loadDatabase();
+    if (isArchived) {
+      const c = db.customers.find(x => x.id === id);
+      if (c) c.status = 'inactive';
+    } else {
+      db.customers = db.customers.filter(c => c.id !== id);
+    }
+    saveDatabase(db);
+
+    return res.json({
+      success: true,
+      archived: isArchived,
+      message: isArchived
+        ? 'Customer has linked orders/payments and was safely archived (inactive).'
+        : 'Customer profile permanently removed.',
+    });
   } catch (err: any) {
-    console.warn('[API /customers/:id] Exception:', err?.message || err);
+    console.error('[API /customers/:id] Exception:', err?.message || err);
     return res.status(500).json({ message: err.message });
   }
 });
@@ -652,9 +696,46 @@ apiRouter.delete('/customers/:id', async (req: Request, res: Response) => {
 // 5. PRODUCTS
 // -----------------------------------------------------------------------------
 
-apiRouter.get('/products', (req: Request, res: Response) => {
-  const db = loadDatabase();
-  return res.json(db.products);
+apiRouter.get('/products', async (req: Request, res: Response) => {
+  const supabase = getServerSupabase();
+  let products: Product[] = [];
+  let fetchedFromSupabase = false;
+
+  if (supabase) {
+    try {
+      const [prodsRes, invRes] = await Promise.all([
+        supabase.from('products').select('*').order('created_at'),
+        supabase.from('inventory').select('*'),
+      ]);
+
+      if (!prodsRes.error && prodsRes.data && prodsRes.data.length > 0) {
+        const invMap: Record<string, any> = {};
+        (invRes.data || []).forEach((i: any) => {
+          invMap[i.product_id] = i;
+        });
+
+        products = prodsRes.data.map((p: any) => ({
+          ...p,
+          filled_stock: invMap[p.id]?.filled_stock ?? p.filled_stock ?? 0,
+          empty_cans: invMap[p.id]?.empty_cans ?? p.empty_cans ?? 0,
+        }));
+        fetchedFromSupabase = true;
+
+        const db = loadDatabase();
+        db.products = products;
+        saveDatabase(db);
+      }
+    } catch (err: any) {
+      console.warn('[API /products] Supabase notice:', err?.message || err);
+    }
+  }
+
+  if (!fetchedFromSupabase) {
+    const db = loadDatabase();
+    products = db.products || [];
+  }
+
+  return res.json(products);
 });
 
 apiRouter.post('/products', async (req: Request, res: Response) => {
@@ -682,27 +763,32 @@ apiRouter.post('/products', async (req: Request, res: Response) => {
     const newInv: any = {
       id: `inv-${Date.now()}`,
       product_id: id,
-      product_name: newProd.name,
-      size: newProd.size,
-      unit: newProd.unit,
-      selling_price: newProd.selling_price,
-      cost_price: newProd.cost_price,
       filled_stock: newProd.filled_stock || 0,
       empty_cans: newProd.empty_cans || 0,
       damaged_cans: 0,
       lost_cans: 0,
-      is_reusable: newProd.is_reusable,
       updated_at: new Date().toISOString(),
     };
     db.inventory.push(newInv);
-
     saveDatabase(db);
 
     const supabase = getServerSupabase();
     if (supabase) {
       try {
-        await supabase.from('products').insert(newProd);
-      } catch (_) {}
+        await supabase.from('products').insert({
+          id,
+          name: newProd.name,
+          size: newProd.size,
+          unit: newProd.unit,
+          selling_price: newProd.selling_price,
+          cost_price: newProd.cost_price,
+          is_reusable: newProd.is_reusable,
+          is_active: 1,
+        });
+        await supabase.from('inventory').insert(newInv);
+      } catch (err: any) {
+        console.warn('[API /products] Supabase insert warning:', err?.message || err);
+      }
     }
 
     return res.status(201).json(newProd);
@@ -728,8 +814,19 @@ apiRouter.put('/products/:id', async (req: Request, res: Response) => {
     const supabase = getServerSupabase();
     if (supabase) {
       try {
-        await supabase.from('products').update(updates).eq('id', id);
-      } catch (_) {}
+        const cleanUpdates = {
+          ...(updates.name !== undefined && { name: updates.name }),
+          ...(updates.size !== undefined && { size: updates.size }),
+          ...(updates.unit !== undefined && { unit: updates.unit }),
+          ...(updates.selling_price !== undefined && { selling_price: Number(updates.selling_price) }),
+          ...(updates.cost_price !== undefined && { cost_price: Number(updates.cost_price) }),
+          ...(updates.is_reusable !== undefined && { is_reusable: updates.is_reusable ? 1 : 0 }),
+          updated_at: new Date().toISOString(),
+        };
+        await supabase.from('products').update(cleanUpdates).eq('id', id);
+      } catch (err: any) {
+        console.warn('[API /products/:id] Supabase update warning:', err?.message || err);
+      }
     }
 
     return res.json({ success: true, product: db.products[idx] });
@@ -739,43 +836,162 @@ apiRouter.put('/products/:id', async (req: Request, res: Response) => {
 });
 
 // -----------------------------------------------------------------------------
-// 6. INVENTORY
+// 6. INVENTORY & STOCK ADJUSTMENTS (REAL SUPABASE POSTGRESQL + AUDIT TRAIL)
 // -----------------------------------------------------------------------------
 
-apiRouter.get('/inventory', (req: Request, res: Response) => {
+apiRouter.get('/inventory', async (req: Request, res: Response) => {
+  const supabase = getServerSupabase();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from('inventory').select('*');
+      if (!error && data) {
+        return res.json(data);
+      }
+    } catch (_) {}
+  }
   const db = loadDatabase();
   return res.json(db.inventory);
 });
 
-apiRouter.get('/inventory/movements', (req: Request, res: Response) => {
+apiRouter.get('/inventory/movements', async (req: Request, res: Response) => {
+  const supabase = getServerSupabase();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('inventory_movements')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (!error && data) {
+        return res.json(data);
+      }
+    } catch (_) {}
+  }
   const db = loadDatabase();
   return res.json(db.inventory_movements);
 });
 
 apiRouter.post('/inventory/adjust', async (req: Request, res: Response) => {
   try {
-    const { product_id, stock_type, quantity, reason } = req.body;
-    const db = loadDatabase();
-    const inv = db.inventory.find(i => i.product_id === product_id);
+    const { product_id, stock_type = 'filled', adjustment, quantity, reason, user_name } = req.body;
+    const delta = Number(adjustment !== undefined ? adjustment : quantity);
 
-    if (inv) {
-      const field = stock_type === 'filled' ? 'filled_stock' : 'empty_cans';
-      inv[field] = Math.max(0, (inv[field] || 0) + Number(quantity));
-      inv.updated_at = new Date().toISOString();
+    if (isNaN(delta)) {
+      return res.status(400).json({ message: 'Valid adjustment number is required' });
     }
 
-    const movement: any = {
+    const supabase = getServerSupabase();
+    let prevStock = 0;
+    let newStock = 0;
+    const nowIso = new Date().toISOString();
+
+    if (supabase) {
+      // 1. Get current inventory record for this product
+      const { data: invRow } = await supabase
+        .from('inventory')
+        .select('*')
+        .eq('product_id', product_id)
+        .maybeSingle();
+
+      const field = stock_type === 'empty' ? 'empty_cans' : 'filled_stock';
+      prevStock = invRow ? Number(invRow[field] || 0) : 0;
+      newStock = Math.max(0, prevStock + delta);
+
+      if (invRow) {
+        const { error: updErr } = await supabase
+          .from('inventory')
+          .update({
+            [field]: newStock,
+            updated_at: nowIso,
+          })
+          .eq('id', invRow.id);
+
+        if (updErr) {
+          console.error('[API /inventory/adjust] Supabase inventory update error:', updErr);
+          return res.status(500).json({ message: updErr.message });
+        }
+      } else {
+        const { error: insErr } = await supabase
+          .from('inventory')
+          .insert({
+            id: `inv-${Date.now()}`,
+            product_id,
+            [field]: newStock,
+            updated_at: nowIso,
+          });
+
+        if (insErr) {
+          console.error('[API /inventory/adjust] Supabase inventory insert error:', insErr);
+          return res.status(500).json({ message: insErr.message });
+        }
+      }
+
+      // 2. Insert audit trail in inventory_movements table
+      const { error: movErr } = await supabase
+        .from('inventory_movements')
+        .insert({
+          id: `mov-${Date.now()}`,
+          product_id,
+          movement_type: delta >= 0 ? 'adjustment_increase' : 'adjustment_decrease',
+          stock_type,
+          quantity: delta,
+          previous_stock: prevStock,
+          new_stock: newStock,
+          reason: reason || 'Manual Stock Adjustment',
+          reference_type: 'manual_adjustment',
+          user_id: user_name || 'Owner',
+          created_at: nowIso,
+        });
+
+      if (movErr) {
+        console.warn('[API /inventory/adjust] Supabase movement record notice:', movErr.message);
+      }
+
+      console.log(`[STOCK ADJUSTMENT] Product: ${product_id}, Delta: ${delta}, Prev: ${prevStock}, New: ${newStock}`);
+    }
+
+    // Keep central DB aligned
+    const db = loadDatabase();
+    let inv = db.inventory.find(i => i.product_id === product_id) as any;
+    if (!inv) {
+      inv = {
+        id: `inv-${Date.now()}`,
+        product_id,
+        filled_stock: 0,
+        empty_cans: 0,
+        damaged_cans: 0,
+        lost_cans: 0,
+        updated_at: nowIso,
+      };
+      db.inventory.push(inv);
+    }
+    const field = stock_type === 'empty' ? 'empty_cans' : 'filled_stock';
+    inv[field] = newStock;
+    inv.updated_at = nowIso;
+
+    // Also update product card filled_stock
+    const prod = db.products.find(p => p.id === product_id);
+    if (prod && stock_type === 'filled') {
+      prod.filled_stock = newStock;
+    }
+
+    db.inventory_movements.unshift({
       id: `mov-${Date.now()}`,
       product_id,
+      movement_type: delta >= 0 ? 'adjustment_increase' : 'adjustment_decrease',
       stock_type,
-      quantity: Number(quantity),
+      quantity: delta,
       reason: reason || '',
-      created_at: new Date().toISOString(),
-    };
-    db.inventory_movements.unshift(movement);
+      created_at: nowIso,
+    } as any);
     saveDatabase(db);
 
-    return res.json({ success: true });
+    return res.json({
+      success: true,
+      previous_stock: prevStock,
+      adjustment: delta,
+      new_stock: newStock,
+    });
   } catch (err: any) {
     return res.status(500).json({ message: err.message });
   }
@@ -824,16 +1040,126 @@ apiRouter.post('/production', async (req: Request, res: Response) => {
 });
 
 // -----------------------------------------------------------------------------
-// 8. ORDERS
+// 8. ORDERS (REAL SUPABASE POSTGRESQL PERSISTENCE + RELATIONAL JOINS)
 // -----------------------------------------------------------------------------
 
-apiRouter.get('/orders', (req: Request, res: Response) => {
-  const db = loadDatabase();
-  return res.json(db.orders);
+apiRouter.get('/orders', async (req: Request, res: Response) => {
+  const supabase = getServerSupabase();
+  const statusFilter = (req.query.status as string || '').trim();
+
+  let orders: any[] = [];
+  let fetchedFromSupabase = false;
+
+  if (supabase) {
+    try {
+      let query = supabase
+        .from('orders')
+        .select(`
+          *,
+          customer:customers (
+            id,
+            name,
+            phone,
+            area,
+            address
+          ),
+          items:order_items (
+            id,
+            order_id,
+            product_id,
+            quantity,
+            unit_price,
+            total_price,
+            product:products (
+              id,
+              name,
+              size,
+              unit
+            )
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (statusFilter) {
+        query = query.eq('order_status', statusFilter);
+      }
+
+      const { data, error } = await query;
+      if (!error && data) {
+        orders = data.map((o: any) => ({
+          ...o,
+          customer_name: o.customer?.name || '',
+          customer_phone: o.customer?.phone || '',
+          customer_area: o.customer?.area || '',
+          items: (o.items || []).map((it: any) => ({
+            ...it,
+            product_name: it.product?.name || '',
+            size: it.product?.size || '',
+            unit: it.product?.unit || '',
+          })),
+        }));
+        fetchedFromSupabase = true;
+
+        // Keep local central db in sync
+        const db = loadDatabase();
+        db.orders = orders;
+        saveDatabase(db);
+      } else if (error) {
+        console.error('[API /orders] Supabase SELECT error:', error.message);
+      }
+    } catch (err: any) {
+      console.error('[API /orders] Supabase SELECT exception:', err?.message || err);
+    }
+  }
+
+  if (!fetchedFromSupabase) {
+    const db = loadDatabase();
+    orders = db.orders || [];
+    if (statusFilter) {
+      orders = orders.filter((o: any) => o.order_status === statusFilter);
+    }
+  }
+
+  return res.json(orders);
 });
 
-apiRouter.get('/orders/:id', (req: Request, res: Response) => {
+apiRouter.get('/orders/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const supabase = getServerSupabase();
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          *,
+          customer:customers (*),
+          items:order_items (
+            *,
+            product:products (*)
+          )
+        `)
+        .eq('id', id)
+        .maybeSingle();
+
+      if (!error && data) {
+        const order = {
+          ...data,
+          customer_name: data.customer?.name || '',
+          customer_phone: data.customer?.phone || '',
+          customer_area: data.customer?.area || '',
+        };
+        const items = (data.items || []).map((it: any) => ({
+          ...it,
+          product_name: it.product?.name || '',
+          size: it.product?.size || '',
+          unit: it.product?.unit || '',
+        }));
+        return res.json({ order, items });
+      }
+    } catch (_) {}
+  }
+
   const db = loadDatabase();
   const order = db.orders.find(o => o.id === id);
   if (!order) return res.status(404).json({ message: 'Order not found' });
@@ -844,40 +1170,147 @@ apiRouter.get('/orders/:id', (req: Request, res: Response) => {
 apiRouter.post('/orders', async (req: Request, res: Response) => {
   try {
     const orderData = req.body;
-    const db = loadDatabase();
+    if (!orderData.customer_id) {
+      return res.status(400).json({ message: 'Customer ID is required' });
+    }
+    if (!orderData.items || orderData.items.length === 0) {
+      return res.status(400).json({ message: 'At least one product item is required' });
+    }
+
+    const supabase = getServerSupabase();
     const id = `ord-${Date.now()}`;
     const orderNumber = `ORD-${Date.now().toString().slice(-6)}`;
-    const cust = db.customers.find(c => c.id === orderData.customer_id) || orderData.customer;
-
     const total_amount = (orderData.items || []).reduce(
       (s: number, it: any) => s + (Number(it.quantity || 0) * Number(it.unit_price || 0)),
       0
     );
 
-    const newOrder = {
+    let customerId = orderData.customer_id;
+    const nowIso = new Date().toISOString();
+    const deliveryDate = orderData.delivery_date || nowIso.split('T')[0];
+
+    // Ensure customer exists in Supabase so foreign key constraint orders_customer_id_fkey succeeds
+    if (supabase) {
+      const { data: existingCust } = await supabase
+        .from('customers')
+        .select('id, name, phone, area, address')
+        .eq('id', customerId)
+        .maybeSingle();
+
+      if (!existingCust && (orderData.customer || orderData.customer_name)) {
+        const tempCustData = {
+          id: customerId,
+          name: (orderData.customer?.name || orderData.customer_name || 'Walk-in Customer').trim(),
+          phone: (orderData.customer?.phone || orderData.customer_phone || '03000000000').trim(),
+          address: (orderData.customer?.address || orderData.delivery_address || 'Quetta').trim(),
+          area: orderData.customer?.area || orderData.customer_area || 'Main Jinnah Road',
+          customer_type_id: orderData.customer?.customer_type_id || 'ct-other',
+          selling_rate: Number(orderData.items[0]?.unit_price || 220),
+          status: 'active',
+          created_at: nowIso,
+        };
+        const { error: custErr } = await supabase.from('customers').insert(tempCustData);
+        if (custErr) {
+          console.warn('[API /orders] Temp customer auto-create warning:', custErr.message);
+        }
+      }
+    }
+
+    // 1. Prepare exact Supabase columns for orders table
+    const cleanOrderRow = {
       id,
       order_number: orderNumber,
-      customer_id: orderData.customer_id,
-      customer_name: cust?.name || orderData.customer_name || '',
-      customer_phone: cust?.phone || orderData.customer_phone || '',
-      customer_area: cust?.area || orderData.customer_area || '',
+      customer_id: customerId,
       total_amount,
       payment_type: orderData.payment_type || 'Cash',
       payment_status: 'pending',
       order_status: 'confirmed',
-      delivery_date: orderData.delivery_date || new Date().toISOString().split('T')[0],
-      delivery_address: orderData.delivery_address || cust?.address || '',
+      delivery_date: deliveryDate,
+      delivery_address: orderData.delivery_address || orderData.customer?.address || '',
       notes: orderData.notes || '',
-      items: orderData.items || [],
-      created_at: new Date().toISOString(),
+      created_by: orderData.created_by || 'Owner',
+      created_at: nowIso,
     };
 
-    db.orders.unshift(newOrder);
+    if (supabase) {
+      // INSERT Order into Supabase
+      const { error: orderInsertErr } = await supabase.from('orders').insert(cleanOrderRow);
+      if (orderInsertErr) {
+        console.error('[API /orders] Supabase orders INSERT error:', orderInsertErr);
+        return res.status(500).json({ message: `Supabase order error: ${orderInsertErr.message}` });
+      }
 
-    // Save order items
+      // 2. INSERT Order Items into Supabase
+      const cleanItems = orderData.items.map((it: any) => ({
+        id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        order_id: id,
+        product_id: it.product_id,
+        quantity: Number(it.quantity || 1),
+        unit_price: Number(it.unit_price || 0),
+        total_price: Number(it.quantity || 1) * Number(it.unit_price || 0),
+      }));
+
+      const { error: itemsInsertErr } = await supabase.from('order_items').insert(cleanItems);
+      if (itemsInsertErr) {
+        console.error('[API /orders] Supabase order_items INSERT error:', itemsInsertErr);
+      }
+
+      // 3. Automatically create corresponding Delivery record in Supabase deliveries table
+      const deliveryId = `del-${Date.now()}`;
+      const deliveryNumber = `DEL-${Date.now().toString().slice(-6)}`;
+      const cleanDeliveryRow = {
+        id: deliveryId,
+        delivery_number: deliveryNumber,
+        order_id: id,
+        customer_id: customerId,
+        driver_id: orderData.driver_id || null,
+        vehicle: orderData.vehicle || 'Van #1',
+        delivery_date: deliveryDate,
+        delivery_time: orderData.delivery_time || 'Morning',
+        status: 'assigned',
+        empty_cans_returned: 0,
+        payment_collected: 0,
+        payment_method: orderData.payment_type || 'Cash',
+        notes: orderData.notes || '',
+        created_at: nowIso,
+      };
+
+      const { error: delInsertErr } = await supabase.from('deliveries').insert(cleanDeliveryRow);
+      if (delInsertErr) {
+        console.error('[API /orders] Supabase auto deliveries INSERT error:', delInsertErr);
+      } else {
+        // Also insert delivery_items
+        const delItems = orderData.items.map((it: any) => ({
+          id: `ditem-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          delivery_id: deliveryId,
+          product_id: it.product_id,
+          quantity: Number(it.quantity || 1),
+        }));
+        try {
+          await supabase.from('delivery_items').insert(delItems);
+        } catch (_) {}
+      }
+
+      console.log(`[ORDER] Created & saved in Supabase: #${orderNumber} (${id}) with Delivery: #${deliveryNumber}`);
+    }
+
+    // Keep central database aligned
+    const db = loadDatabase();
+    const cust = db.customers.find(c => c.id === customerId);
+    const newOrderFull = {
+      ...cleanOrderRow,
+      customer_name: cust?.name || orderData.customer_name || '',
+      customer_phone: cust?.phone || orderData.customer_phone || '',
+      customer_area: cust?.area || orderData.customer_area || '',
+      items: orderData.items || [],
+      created_at: nowIso,
+    };
+    db.orders.unshift(newOrderFull);
+
+    // Save order items in central db
     for (const it of orderData.items || []) {
       db.order_items.push({
-        id: `oi-${Date.now()}-${Math.random()}`,
+        id: `oi-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         order_id: id,
         product_id: it.product_id,
         quantity: it.quantity,
@@ -888,40 +1321,175 @@ apiRouter.post('/orders', async (req: Request, res: Response) => {
 
     saveDatabase(db);
 
+    return res.status(201).json({ id, orderNumber });
+  } catch (err: any) {
+    console.error('[API /orders] Exception:', err);
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+apiRouter.delete('/orders/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
     const supabase = getServerSupabase();
+
     if (supabase) {
-      try {
-        await supabase.from('orders').insert(newOrder);
-      } catch (_) {}
+      // 1. Delete linked deliveries and their items
+      const { data: dels } = await supabase.from('deliveries').select('id').eq('order_id', id);
+      if (dels && dels.length > 0) {
+        const delIds = dels.map((d: any) => d.id);
+        await supabase.from('delivery_items').delete().in('delivery_id', delIds);
+        await supabase.from('deliveries').delete().in('id', delIds);
+      }
+      // 2. Delete order items
+      await supabase.from('order_items').delete().eq('order_id', id);
+      // 3. Delete order
+      const { error } = await supabase.from('orders').delete().eq('id', id);
+      if (error) {
+        return res.status(500).json({ message: error.message });
+      }
     }
 
-    return res.status(201).json({ id, orderNumber });
+    const db = loadDatabase();
+    db.orders = db.orders.filter(o => o.id !== id);
+    db.order_items = db.order_items.filter(oi => oi.order_id !== id);
+    db.deliveries = db.deliveries.filter(d => d.order_id !== id);
+    saveDatabase(db);
+
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+apiRouter.put('/orders/:id/status', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { status, payment_status } = req.body;
+    const supabase = getServerSupabase();
+
+    if (supabase) {
+      const updates: any = { updated_at: new Date().toISOString() };
+      if (status) updates.order_status = status;
+      if (payment_status) updates.payment_status = payment_status;
+      const { error } = await supabase.from('orders').update(updates).eq('id', id);
+      if (error) return res.status(500).json({ message: error.message });
+    }
+
+    const db = loadDatabase();
+    const ord = db.orders.find(o => o.id === id);
+    if (ord) {
+      if (status) ord.order_status = status;
+      if (payment_status) ord.payment_status = payment_status;
+      saveDatabase(db);
+    }
+
+    return res.json({ success: true });
   } catch (err: any) {
     return res.status(500).json({ message: err.message });
   }
 });
 
 // -----------------------------------------------------------------------------
-// 9. DELIVERIES
+// 9. DELIVERIES (REAL SUPABASE POSTGRESQL + FLEET DISPATCH)
 // -----------------------------------------------------------------------------
 
-apiRouter.get('/deliveries', (req: Request, res: Response) => {
-  const db = loadDatabase();
+apiRouter.get('/deliveries', async (req: Request, res: Response) => {
+  const supabase = getServerSupabase();
   const areaFilter = (req.query.area as string || '').trim();
   const statusFilter = (req.query.status as string || '').trim();
   const driverFilter = (req.query.driverId as string || '').trim();
   const dateFilter = (req.query.date as string || '').trim();
 
-  let deliveries = db.deliveries;
-  if (statusFilter) {
-    deliveries = deliveries.filter(d => d.status === statusFilter);
+  let deliveries: any[] = [];
+  let fetchedFromSupabase = false;
+
+  if (supabase) {
+    try {
+      let query = supabase
+        .from('deliveries')
+        .select(`
+          *,
+          customer:customers (
+            id,
+            name,
+            phone,
+            area,
+            address
+          ),
+          order:orders (
+            id,
+            order_number,
+            total_amount
+          ),
+          items:delivery_items (
+            id,
+            delivery_id,
+            product_id,
+            quantity,
+            product:products (
+              id,
+              name
+            )
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (statusFilter) {
+        query = query.eq('status', statusFilter);
+      }
+      if (driverFilter) {
+        query = query.eq('driver_id', driverFilter);
+      }
+      if (dateFilter) {
+        query = query.eq('delivery_date', dateFilter);
+      }
+
+      const { data, error } = await query;
+      if (!error && data) {
+        // Fetch staff driver names map
+        const db = loadDatabase();
+        const staffMap: Record<string, string> = {};
+        db.users.forEach((u: any) => {
+          staffMap[u.id] = u.name;
+        });
+
+        deliveries = data.map((d: any) => ({
+          ...d,
+          customer_name: d.customer?.name || '',
+          customer_phone: d.customer?.phone || '',
+          customer_address: d.customer?.address || '',
+          customer_area: d.customer?.area || '',
+          order_number: d.order?.order_number || '',
+          total_amount: d.order?.total_amount || 0,
+          driver_name: d.driver_id ? (staffMap[d.driver_id] || 'Assigned Driver') : 'Unassigned',
+          items: (d.items || []).map((it: any) => ({
+            ...it,
+            product_name: it.product?.name || '',
+          })),
+        }));
+        fetchedFromSupabase = true;
+
+        // Keep local central DB aligned
+        db.deliveries = deliveries;
+        saveDatabase(db);
+      } else if (error) {
+        console.error('[API /deliveries] Supabase SELECT error:', error.message);
+      }
+    } catch (err: any) {
+      console.error('[API /deliveries] Supabase SELECT exception:', err?.message || err);
+    }
   }
-  if (driverFilter) {
-    deliveries = deliveries.filter(d => d.driver_id === driverFilter);
+
+  if (!fetchedFromSupabase) {
+    const db = loadDatabase();
+    deliveries = db.deliveries || [];
+    if (statusFilter) deliveries = deliveries.filter((d: any) => d.status === statusFilter);
+    if (driverFilter) deliveries = deliveries.filter((d: any) => d.driver_id === driverFilter);
+    if (dateFilter) deliveries = deliveries.filter((d: any) => d.delivery_date === dateFilter);
   }
-  if (dateFilter) {
-    deliveries = deliveries.filter(d => d.scheduled_date === dateFilter);
-  }
+
+  // Delivery Area Filter
   if (areaFilter) {
     if (areaFilter === '__temporary__') {
       const fixed = [
@@ -932,9 +1500,9 @@ apiRouter.get('/deliveries', (req: Request, res: Response) => {
         'Hazara Town',
         'Mariabad',
       ];
-      deliveries = deliveries.filter(d => !fixed.includes(d.customer_area || ''));
+      deliveries = deliveries.filter((d: any) => !fixed.includes(d.customer_area || ''));
     } else {
-      deliveries = deliveries.filter(d => d.customer_area === areaFilter);
+      deliveries = deliveries.filter((d: any) => d.customer_area === areaFilter);
     }
   }
 
@@ -944,43 +1512,110 @@ apiRouter.get('/deliveries', (req: Request, res: Response) => {
 apiRouter.post('/deliveries/create-for-order', async (req: Request, res: Response) => {
   try {
     const params = req.body;
+    const supabase = getServerSupabase();
+
+    if (!params.order_id) {
+      return res.status(400).json({ message: 'Order ID is required' });
+    }
+
+    let customer_id = '';
+    let deliveryDate = params.delivery_date || new Date().toISOString().split('T')[0];
+    const nowIso = new Date().toISOString();
+
+    if (supabase) {
+      // Check if a delivery already exists for this order: if so, update assignment!
+      const { data: existingDel } = await supabase
+        .from('deliveries')
+        .select('id')
+        .eq('order_id', params.order_id)
+        .maybeSingle();
+
+      if (existingDel) {
+        const { error: updErr } = await supabase
+          .from('deliveries')
+          .update({
+            driver_id: params.driver_id || null,
+            vehicle: params.vehicle || 'Van #1',
+            delivery_time: params.delivery_time || 'Morning',
+            status: 'assigned',
+            updated_at: nowIso,
+          })
+          .eq('id', existingDel.id);
+
+        if (updErr) {
+          console.error('[API /deliveries/create-for-order] Supabase update error:', updErr);
+          return res.status(500).json({ message: updErr.message });
+        }
+
+        // Update order status to dispatched
+        await supabase.from('orders').update({ order_status: 'dispatched', updated_at: nowIso }).eq('id', params.order_id);
+
+        return res.json({ id: existingDel.id, updated: true });
+      }
+
+      // Find order to extract customer_id and delivery_date
+      const { data: ord } = await supabase
+        .from('orders')
+        .select('customer_id, delivery_date')
+        .eq('id', params.order_id)
+        .maybeSingle();
+
+      if (ord) {
+        customer_id = ord.customer_id;
+        if (ord.delivery_date) deliveryDate = ord.delivery_date;
+      }
+
+      const id = `del-${Date.now()}`;
+      const deliveryNumber = `DEL-${Date.now().toString().slice(-6)}`;
+      const cleanDelRow = {
+        id,
+        delivery_number: deliveryNumber,
+        order_id: params.order_id,
+        customer_id: customer_id || 'cust-unknown',
+        driver_id: params.driver_id || null,
+        vehicle: params.vehicle || 'Van #1',
+        delivery_date: deliveryDate,
+        delivery_time: params.delivery_time || 'Morning',
+        status: 'assigned',
+        empty_cans_returned: 0,
+        payment_collected: 0,
+        notes: params.notes || '',
+        created_at: nowIso,
+      };
+
+      const { error: insErr } = await supabase.from('deliveries').insert(cleanDelRow);
+      if (insErr) {
+        console.error('[API /deliveries/create-for-order] Supabase insert error:', insErr);
+        return res.status(500).json({ message: insErr.message });
+      }
+
+      // Update order status to dispatched
+      await supabase.from('orders').update({ order_status: 'dispatched', updated_at: nowIso }).eq('id', params.order_id);
+
+      return res.status(201).json({ id });
+    }
+
+    // Central DB fallback
     const db = loadDatabase();
     const id = `del-${Date.now()}`;
     const deliveryNumber = `DEL-${Date.now().toString().slice(-6)}`;
     const ord = db.orders.find(o => o.id === params.order_id);
-    const cust = ord ? db.customers.find(c => c.id === ord.customer_id) : null;
-    const driver = db.users.find(u => u.id === params.driver_id);
-
     const newDelivery = {
       id,
       delivery_number: deliveryNumber,
       order_id: params.order_id,
       customer_id: ord?.customer_id || '',
-      customer_name: cust?.name || ord?.customer_name || '',
-      customer_phone: cust?.phone || ord?.customer_phone || '',
-      customer_address: cust?.address || ord?.delivery_address || '',
-      customer_area: cust?.area || ord?.customer_area || '',
       driver_id: params.driver_id,
-      driver_name: driver?.name || 'Driver',
       vehicle: params.vehicle || 'Van #1',
-      delivery_date: params.delivery_date,
+      delivery_date: deliveryDate,
       delivery_time: params.delivery_time || 'Morning',
       status: 'assigned',
-      total_amount: ord?.total_amount || 0,
       notes: params.notes || '',
-      created_at: new Date().toISOString(),
+      created_at: nowIso,
     };
-
     db.deliveries.unshift(newDelivery);
     if (ord) ord.order_status = 'dispatched';
     saveDatabase(db);
-
-    const supabase = getServerSupabase();
-    if (supabase) {
-      try {
-        await supabase.from('deliveries').insert(newDelivery);
-      } catch (_) {}
-    }
 
     return res.status(201).json({ id });
   } catch (err: any) {
@@ -992,65 +1627,133 @@ apiRouter.post('/deliveries/:id/complete', async (req: Request, res: Response) =
   try {
     const { id } = req.params;
     const completionData = req.body;
-    const db = loadDatabase();
-    const del = db.deliveries.find(d => d.id === id);
+    const supabase = getServerSupabase();
 
-    if (!del) return res.status(404).json({ message: 'Delivery not found' });
+    const emptyCans = Number(completionData.empty_cans_returned || 0);
+    const paymentCollected = Number(completionData.payment_collected || 0);
+    const paymentMethod = completionData.payment_method || 'Cash';
+    const notes = completionData.notes || '';
+    const nowIso = new Date().toISOString();
+    const today = nowIso.split('T')[0];
 
-    del.status = 'delivered';
-    del.empty_cans_returned = Number(completionData.empty_cans_returned || 0);
-    del.payment_collected = Number(completionData.payment_collected || 0);
-    del.payment_method = completionData.payment_method || 'Cash';
-    del.notes = completionData.notes || del.notes;
-    del.completed_at = new Date().toISOString();
+    if (supabase) {
+      // 1. Get delivery record from Supabase
+      const { data: del, error: delErr } = await supabase
+        .from('deliveries')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
 
-    const cust = db.customers.find(c => c.id === del.customer_id);
-    if (cust) {
-      if (del.empty_cans_returned > 0) {
-        cust.cans_held = Math.max(0, (cust.cans_held || 0) - del.empty_cans_returned);
-        db.customer_can_movements.unshift({
-          id: `ccm-${Date.now()}`,
-          customer_id: cust.id,
-          product_id: 'prod-19l-can',
-          movement_type: 'returned',
-          quantity: del.empty_cans_returned,
-          balance_after: cust.cans_held,
-          delivery_id: id,
-          reason: `Returned from Delivery ${del.delivery_number}`,
-          created_at: new Date().toISOString(),
-        });
+      if (delErr || !del) {
+        return res.status(404).json({ message: 'Delivery record not found in Supabase' });
       }
 
-      if (del.payment_collected > 0) {
-        cust.outstanding_balance = Math.max(0, (cust.outstanding_balance || 0) - del.payment_collected);
-        db.payments.unshift({
-          id: `pay-${Date.now()}`,
-          payment_number: `PAY-${Date.now().toString().slice(-6)}`,
-          customer_id: cust.id,
-          order_id: del.order_id,
-          delivery_id: id,
-          amount: del.payment_collected,
-          payment_method: del.payment_method,
-          payment_date: new Date().toISOString().split('T')[0],
-          created_at: new Date().toISOString(),
-        });
-        db.customer_ledger.unshift({
-          id: `led-${Date.now()}`,
-          customer_id: cust.id,
-          transaction_type: 'payment',
-          reference_type: 'delivery',
-          reference_id: id,
-          debit: 0,
-          credit: del.payment_collected,
-          balance: cust.outstanding_balance,
-          description: `Cash collection from delivery ${del.delivery_number}`,
-          transaction_date: new Date().toISOString().split('T')[0],
-          created_at: new Date().toISOString(),
-        });
+      // 2. Update delivery record in Supabase
+      const { error: updErr } = await supabase
+        .from('deliveries')
+        .update({
+          status: 'delivered',
+          empty_cans_returned: emptyCans,
+          payment_collected: paymentCollected,
+          payment_method: paymentMethod,
+          notes: notes || del.notes,
+          completed_at: nowIso,
+          updated_at: nowIso,
+        })
+        .eq('id', id);
+
+      if (updErr) {
+        console.error('[API /deliveries/:id/complete] Supabase delivery update error:', updErr);
+        return res.status(500).json({ message: updErr.message });
       }
+
+      // 3. Update order status to completed
+      if (del.order_id) {
+        await supabase.from('orders').update({
+          order_status: 'completed',
+          payment_status: paymentCollected > 0 ? 'paid' : 'pending',
+          updated_at: nowIso,
+        }).eq('id', del.order_id);
+      }
+
+      // 4. Update customer cans & balance in Supabase
+      const { data: cust } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('id', del.customer_id)
+        .maybeSingle();
+
+      if (cust) {
+        const newCans = Math.max(0, (cust.cans_held || 0) - emptyCans);
+        const newBalance = Math.max(0, (cust.outstanding_balance || 0) - paymentCollected);
+
+        await supabase.from('customers').update({
+          cans_held: newCans,
+          outstanding_balance: newBalance,
+          updated_at: nowIso,
+        }).eq('id', cust.id);
+
+        // Record empty can movement in Supabase
+        if (emptyCans > 0) {
+          await supabase.from('customer_can_movements').insert({
+            id: `canmov-${Date.now()}`,
+            customer_id: cust.id,
+            product_id: 'prod-19l-can',
+            movement_type: 'returned',
+            quantity: emptyCans,
+            balance_after: newCans,
+            delivery_id: id,
+            reason: `Returned from Delivery ${del.delivery_number}`,
+            created_at: nowIso,
+          });
+        }
+
+        // Record payment & ledger in Supabase
+        if (paymentCollected > 0) {
+          await supabase.from('payments').insert({
+            id: `pay-${Date.now()}`,
+            payment_number: `PAY-${Date.now().toString().slice(-6)}`,
+            customer_id: cust.id,
+            order_id: del.order_id,
+            delivery_id: id,
+            amount: paymentCollected,
+            payment_method: paymentMethod,
+            payment_date: today,
+            notes,
+            created_at: nowIso,
+          });
+
+          await supabase.from('customer_ledger').insert({
+            id: `ledg-${Date.now()}`,
+            customer_id: cust.id,
+            transaction_type: 'payment',
+            reference_type: 'delivery',
+            reference_id: id,
+            debit: 0,
+            credit: paymentCollected,
+            balance: newBalance,
+            description: `Payment collection from delivery ${del.delivery_number}`,
+            transaction_date: today,
+            created_at: nowIso,
+          });
+        }
+      }
+
+      console.log(`[DELIVERY COMPLETED] #${del.delivery_number} successfully recorded in Supabase`);
     }
 
-    saveDatabase(db);
+    // Keep central DB aligned
+    const db = loadDatabase();
+    const localDel = db.deliveries.find(d => d.id === id);
+    if (localDel) {
+      localDel.status = 'delivered';
+      localDel.empty_cans_returned = emptyCans;
+      localDel.payment_collected = paymentCollected;
+      localDel.payment_method = paymentMethod;
+      localDel.completed_at = nowIso;
+      saveDatabase(db);
+    }
+
     return res.json({ success: true });
   } catch (err: any) {
     return res.status(500).json({ message: err.message });
@@ -1061,9 +1764,33 @@ apiRouter.put('/deliveries/:id/status', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { status, failure_reason } = req.body;
+    const supabase = getServerSupabase();
+    const nowIso = new Date().toISOString();
+
+    if (supabase) {
+      const updateData: any = {
+        status,
+        updated_at: nowIso,
+      };
+      if (failure_reason !== undefined) updateData.failure_reason = failure_reason;
+
+      const { error } = await supabase.from('deliveries').update(updateData).eq('id', id);
+      if (error) {
+        console.error('[API /deliveries/:id/status] Supabase error:', error.message);
+        return res.status(500).json({ message: error.message });
+      }
+
+      // If status is delivered, update order status to completed
+      if (status === 'delivered') {
+        const { data: delRow } = await supabase.from('deliveries').select('order_id').eq('id', id).maybeSingle();
+        if (delRow?.order_id) {
+          await supabase.from('orders').update({ order_status: 'completed', updated_at: nowIso }).eq('id', delRow.order_id);
+        }
+      }
+    }
+
     const db = loadDatabase();
     const del = db.deliveries.find(d => d.id === id);
-
     if (del) {
       del.status = status;
       if (failure_reason) del.failure_reason = failure_reason;

@@ -2032,40 +2032,6 @@ apiRouter.post('/expenses', async (req: Request, res: Response) => {
 });
 
 // -----------------------------------------------------------------------------
-// 13. SUPPLIERS
-// -----------------------------------------------------------------------------
-
-apiRouter.get('/suppliers', (req: Request, res: Response) => {
-  const db = loadDatabase();
-  return res.json(db.suppliers);
-});
-
-apiRouter.post('/suppliers', async (req: Request, res: Response) => {
-  try {
-    const sup = req.body;
-    const db = loadDatabase();
-    const id = `sup-${Date.now()}`;
-
-    const newSup = {
-      id,
-      name: sup.name || '',
-      contact_person: sup.contact_person || '',
-      phone: sup.phone || '',
-      address: sup.address || '',
-      materials_supplied: sup.materials_supplied || '',
-      outstanding_payable: Number(sup.outstanding_payable || 0),
-      created_at: new Date().toISOString(),
-    };
-
-    db.suppliers.push(newSup);
-    saveDatabase(db);
-    return res.status(201).json({ id });
-  } catch (err: any) {
-    return res.status(500).json({ message: err.message });
-  }
-});
-
-// -----------------------------------------------------------------------------
 // 14. REPORTS & DASHBOARD
 // -----------------------------------------------------------------------------
 

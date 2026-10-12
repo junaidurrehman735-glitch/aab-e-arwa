@@ -11,8 +11,6 @@ import type {
   Payment,
   Expense,
   ExpenseCategory,
-  Supplier,
-  SupplierTransaction,
   User,
   Permission,
   AuditLog,
@@ -159,7 +157,7 @@ export const SupabaseDataService = {
     const modules = [
       'dashboard', 'customers', 'products', 'inventory', 'production',
       'orders', 'deliveries', 'cans', 'payments', 'expenses',
-      'suppliers', 'staff', 'reports', 'audit', 'settings'
+      'staff', 'reports', 'audit', 'settings'
     ];
 
     if (roleId === 'role-owner') {
@@ -1634,38 +1632,6 @@ export const SupabaseDataService = {
     current.unshift(newExp);
     saveMem('expenses', current);
 
-    return { id };
-  },
-
-  // 12. SUPPLIERS & PROCUREMENT
-  async getSuppliers(): Promise<Supplier[]> {
-    assertRole(['Owner', 'Manager'], 'view suppliers');
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      const { data, error } = await supabase.from('suppliers').select('*').order('name');
-      if (!error && data && data.length > 0) {
-        return data as Supplier[];
-      }
-    }
-    return (getMem('suppliers') || []) as Supplier[];
-  },
-
-  async createSupplier(sup: Partial<Supplier>): Promise<{ id: string }> {
-    assertRole(['Owner', 'Manager'], 'add suppliers');
-    const supabase = getSupabaseClient();
-    const id = `sup-${Date.now()}`;
-    const newSup = {
-      id,
-      name: sup.name || '',
-      contact_person: sup.contact_person || '',
-      phone: sup.phone || '',
-      address: sup.address || '',
-      materials_supplied: sup.materials_supplied || '',
-      outstanding_payable: Number(sup.outstanding_payable || 0),
-    };
-    if (supabase) {
-      await supabase.from('suppliers').insert(newSup);
-    }
     return { id };
   },
 

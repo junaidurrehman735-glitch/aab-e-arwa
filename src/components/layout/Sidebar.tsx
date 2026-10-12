@@ -10,7 +10,6 @@ import {
   RotateCcw,
   CreditCard,
   Receipt,
-  TruckIcon,
   Shield,
   BarChart3,
   History,
@@ -76,7 +75,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'payments', label: 'Payments & Ledgers', icon: CreditCard, module: 'payments' },
         { id: 'expenses', label: 'Operating Expenses', icon: Receipt, module: 'expenses' },
-        { id: 'suppliers', label: 'Suppliers & Vendors', icon: TruckIcon, module: 'suppliers' },
       ],
     },
     {

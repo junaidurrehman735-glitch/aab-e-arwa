@@ -243,16 +243,6 @@ async function handleSupabaseRoute<T>(method: string, endpoint: string, body?: a
     }
   }
 
-  // 13. SUPPLIERS
-  if (pathParts[0] === 'suppliers') {
-    if (method === 'GET') {
-      return (await SupabaseDataService.getSuppliers()) as unknown as T;
-    }
-    if (method === 'POST') {
-      return (await SupabaseDataService.createSupplier(body)) as unknown as T;
-    }
-  }
-
   // 14. REPORTS
   if (pathParts[0] === 'reports') {
     if (pathParts[1] === 'financial') {

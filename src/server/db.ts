@@ -189,7 +189,7 @@ export function getRolePermissions(roleId: string): Permission[] {
   const modules = [
     'dashboard', 'customers', 'products', 'inventory', 'production',
     'orders', 'deliveries', 'cans', 'payments', 'expenses',
-    'suppliers', 'staff', 'reports', 'audit', 'settings'
+    'staff', 'reports', 'audit', 'settings'
   ];
 
   if (roleId === 'role-owner') {

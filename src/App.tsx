@@ -17,7 +17,6 @@ import { DeliveriesPage } from './pages/DeliveriesPage.tsx';
 import { CansPage } from './pages/CansPage.tsx';
 import { PaymentsPage } from './pages/PaymentsPage.tsx';
 import { ExpensesPage } from './pages/ExpensesPage.tsx';
-import { SuppliersPage } from './pages/SuppliersPage.tsx';
 import { StaffPage } from './pages/StaffPage.tsx';
 import { ReportsPage } from './pages/ReportsPage.tsx';
 import { AuditPage } from './pages/AuditPage.tsx';
@@ -56,7 +55,6 @@ function MainLayout() {
     cans: 'Empty Can Asset Reconciliation',
     payments: 'Payments & Collections',
     expenses: 'Operating Expenses',
-    suppliers: 'Vendors & Suppliers',
     staff: 'Staff & Role Permissions',
     reports: 'Financial Reports & P&L',
     audit: 'Audit Security Trail',
@@ -108,8 +106,6 @@ function MainLayout() {
         return <PaymentsPage />;
       case 'expenses':
         return <ExpensesPage />;
-      case 'suppliers':
-        return <SuppliersPage />;
       case 'staff':
         return <StaffPage />;
       case 'reports':

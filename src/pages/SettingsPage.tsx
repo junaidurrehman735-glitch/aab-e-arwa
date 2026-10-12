@@ -434,7 +434,6 @@ export const SettingsPage: React.FC = () => {
             { label: 'Payment Receipts', table: 'payments' },
             { label: 'Operating Expenses', table: 'expenses' },
             { label: 'Inventory Stock', table: 'inventory' },
-            { label: 'Suppliers & Vendors', table: 'suppliers' },
             { label: 'Full Audit Trail', table: 'audit_logs' },
           ].map((item) => (
             <button

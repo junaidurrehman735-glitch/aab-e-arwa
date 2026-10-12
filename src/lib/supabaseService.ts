@@ -147,11 +147,24 @@ export const SupabaseDataService = {
   async getRolePermissions(roleId: string): Promise<Permission[]> {
     const supabase = getSupabaseClient();
     if (supabase) {
-      const { data, error } = await supabase.from('permissions').select('*').eq('role_id', roleId);
-      if (!error && data && data.length > 0) {
-        return data as Permission[];
-      }
+      try {
+        const { data, error } = await supabase.from('permissions').select('*').eq('role_id', roleId);
+        if (!error && data && data.length > 0) {
+          return data as Permission[];
+        }
+      } catch (_) {}
     }
+
+    // Check localStorage cache for locally configured role matrix
+    try {
+      const cached = localStorage.getItem(`aab_role_perms_${roleId}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (_) {}
 
     // Default permissions matrix based on the 3 roles
     const modules = [
@@ -189,20 +202,29 @@ export const SupabaseDataService = {
 
   async updateRolePermissions(roleId: string, permissions: Permission[]): Promise<void> {
     assertRole(['Owner'], 'modify role permissions');
+
+    // Cache locally
+    try {
+      localStorage.setItem(`aab_role_perms_${roleId}`, JSON.stringify(permissions));
+    } catch (_) {}
+
     const supabase = getSupabaseClient();
     if (supabase) {
       for (const p of permissions) {
-        await supabase
-          .from('permissions')
-          .upsert({
-            role_id: roleId,
-            module: p.module,
-            can_view: p.can_view ? 1 : 0,
-            can_create: p.can_create ? 1 : 0,
-            can_edit: p.can_edit ? 1 : 0,
-            can_approve: p.can_approve ? 1 : 0,
-            can_delete: p.can_delete ? 1 : 0,
-          }, { onConflict: 'role_id,module' });
+        try {
+          await supabase
+            .from('permissions')
+            .upsert({
+              id: `${roleId}:${p.module}`,
+              role_id: roleId,
+              module: p.module,
+              can_view: p.can_view ? 1 : 0,
+              can_create: p.can_create ? 1 : 0,
+              can_edit: p.can_edit ? 1 : 0,
+              can_approve: p.can_approve ? 1 : 0,
+              can_delete: p.can_delete ? 1 : 0,
+            }, { onConflict: 'role_id,module' });
+        } catch (_) {}
       }
     }
   },
@@ -896,7 +918,7 @@ export const SupabaseDataService = {
     assertRole(['Owner', 'Manager'], 'register customers');
     const supabase = getSupabaseClient();
 
-    const id = customerData.id || `cust-${Date.now()}`;
+    const id = customerData.id || `cust-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const cleanCustomer = {
       id,
       name: (customerData.name || '').trim(),
@@ -919,18 +941,46 @@ export const SupabaseDataService = {
     };
 
     if (supabase) {
-      try {
-        const { data, error } = await supabase.from('customers').insert(cleanCustomer).select().maybeSingle();
-        if (!error && data) {
-          const inserted = data as Customer;
+      // 1. Check if customer with this specific ID already exists
+      if (customerData.id) {
+        const { data: existing } = await supabase.from('customers').select('*').eq('id', customerData.id).maybeSingle();
+        if (existing) {
           const mem = getMem('customers');
-          saveMem('customers', [inserted, ...mem.filter((c: any) => c.id !== id)]);
-          return inserted;
-        } else if (error) {
-          console.warn('[Supabase INSERT customer notice]:', error.message || error);
+          saveMem('customers', [existing, ...mem.filter((c: any) => c.id !== existing.id)]);
+          return existing as Customer;
         }
-      } catch (err: any) {
-        console.warn('[Supabase INSERT customer exception]:', err?.message || err);
+      }
+
+      // 2. Rapid duplicate check (15 seconds window)
+      const fifteenSecAgo = new Date(Date.now() - 15000).toISOString();
+      const { data: recentDup } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('phone', cleanCustomer.phone)
+        .eq('name', cleanCustomer.name)
+        .eq('address', cleanCustomer.address)
+        .gte('created_at', fifteenSecAgo)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (recentDup) {
+        const mem = getMem('customers');
+        saveMem('customers', [recentDup, ...mem.filter((c: any) => c.id !== recentDup.id)]);
+        return recentDup as Customer;
+      }
+
+      // 3. Insert into Supabase
+      const { data, error } = await supabase.from('customers').insert(cleanCustomer).select().maybeSingle();
+      if (error) {
+        console.error('[Supabase INSERT customer error]:', error.message || error);
+        throw new Error(error.message || 'Failed to create customer in Supabase');
+      }
+      if (data) {
+        const inserted = data as Customer;
+        const mem = getMem('customers');
+        saveMem('customers', [inserted, ...mem.filter((c: any) => c.id !== id)]);
+        return inserted;
       }
     }
 
@@ -949,22 +999,20 @@ export const SupabaseDataService = {
     delete cleanUpdates.company_cans;
 
     if (supabase) {
-      try {
-        const { data, error } = await supabase.from('customers').update(cleanUpdates).eq('id', id).select().maybeSingle();
-        if (!error && data) {
-          const updated = data as Customer;
-          const mem = getMem('customers');
-          const idx = mem.findIndex((c: any) => c.id === id);
-          if (idx !== -1) {
-            mem[idx] = { ...mem[idx], ...updated };
-            saveMem('customers', mem);
-          }
-          return updated;
-        } else if (error) {
-          console.warn('[Supabase UPDATE customer notice]:', error.message || error);
+      const { data, error } = await supabase.from('customers').update(cleanUpdates).eq('id', id).select().maybeSingle();
+      if (error) {
+        console.error('[Supabase UPDATE customer error]:', error.message || error);
+        throw new Error(error.message || 'Failed to update customer in Supabase');
+      }
+      if (data) {
+        const updated = data as Customer;
+        const mem = getMem('customers');
+        const idx = mem.findIndex((c: any) => c.id === id);
+        if (idx !== -1) {
+          mem[idx] = { ...mem[idx], ...updated };
+          saveMem('customers', mem);
         }
-      } catch (err: any) {
-        console.warn('[Supabase UPDATE customer exception]:', err?.message || err);
+        return updated;
       }
     }
 
@@ -983,13 +1031,10 @@ export const SupabaseDataService = {
     const supabase = getSupabaseClient();
 
     if (supabase) {
-      try {
-        const { error } = await supabase.from('customers').delete().eq('id', id);
-        if (error) {
-          console.warn('[Supabase DELETE customer notice]:', error.message || error);
-        }
-      } catch (err: any) {
-        console.warn('[Supabase DELETE customer exception]:', err?.message || err);
+      const { error } = await supabase.from('customers').delete().eq('id', id);
+      if (error) {
+        console.error('[Supabase DELETE customer error]:', error.message || error);
+        throw new Error(error.message || 'Failed to delete customer from Supabase');
       }
     }
 
@@ -1332,71 +1377,183 @@ export const SupabaseDataService = {
     assertRole(['Owner', 'Manager', 'Delivery Boy'], 'complete route delivery');
     const supabase = getSupabaseClient();
     const user = getCurrentAuthUser();
+    const nowIso = new Date().toISOString();
+    const today = nowIso.split('T')[0];
 
     if (supabase) {
-      // 1. Update delivery status
+      // 1. Fetch delivery details first
+      const { data: del } = await supabase.from('deliveries').select('*, order:orders(id, total_amount), customer:customers(*)').eq('id', id).maybeSingle();
+      if (!del) return;
+
+      // STRICT IDEMPOTENCY CHECK: if already delivered, do not execute again!
+      if (del.status === 'delivered') {
+        console.log(`[SupabaseDataService] Delivery ${id} is already completed/delivered. Skipping.`);
+        return;
+      }
+
+      // 2. Fetch order items to get delivered quantities
+      let orderItems: any[] = [];
+      if (del.order_id) {
+        const { data: items } = await supabase.from('order_items').select('*').eq('order_id', del.order_id);
+        orderItems = items || [];
+      }
+
+      const delivered19lItem = orderItems.find((it: any) => it.product_id === 'prod-19l-can');
+      const delivered19lCans = delivered19lItem ? Number(delivered19lItem.quantity || 0) : 0;
+      const orderTotal = Number(del.order?.total_amount || 0);
+
+      // 3. Update delivery status
       await supabase.from('deliveries').update({
         status: 'delivered',
         empty_cans_returned: completionData.empty_cans_returned,
         payment_collected: completionData.payment_collected,
         payment_method: completionData.payment_method || 'Cash',
-        notes: completionData.notes || '',
-        completed_at: new Date().toISOString(),
+        notes: completionData.notes || del.notes || '',
+        completed_at: nowIso,
+        updated_at: nowIso,
       }).eq('id', id);
 
-      // 2. Fetch delivery details
-      const { data: del } = await supabase.from('deliveries').select('*, order:orders(id, total_amount), customer:customers(*)').eq('id', id).single();
-      if (del) {
-        // Record returned cans
+      // 4. Update linked order status to completed
+      if (del.order_id) {
+        await supabase.from('orders').update({
+          order_status: 'completed',
+          payment_status: completionData.payment_collected >= orderTotal ? 'paid' : (completionData.payment_collected > 0 ? 'partially_paid' : 'pending'),
+          updated_at: nowIso,
+        }).eq('id', del.order_id);
+      }
+
+      // 5. Update warehouse inventory
+      for (const item of orderItems) {
+        const { data: currentInv } = await supabase.from('inventory').select('*').eq('product_id', item.product_id).maybeSingle();
+        if (currentInv) {
+          const currentFilled = Number(currentInv.filled_stock || 0);
+          const newFilled = Math.max(0, currentFilled - Number(item.quantity || 0));
+          await supabase.from('inventory').update({ filled_stock: newFilled, updated_at: nowIso }).eq('id', currentInv.id);
+
+          await supabase.from('inventory_movements').insert({
+            id: `mov-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            product_id: item.product_id,
+            movement_type: 'delivery',
+            stock_type: 'filled',
+            quantity: Number(item.quantity || 0),
+            previous_stock: currentFilled,
+            new_stock: newFilled,
+            reason: `Delivered on Route ${del.delivery_number}`,
+            reference_type: 'delivery',
+            reference_id: id,
+            user_id: user.id,
+            created_at: nowIso,
+          });
+        }
+      }
+
+      if (completionData.empty_cans_returned > 0) {
+        const { data: canInv } = await supabase.from('inventory').select('*').eq('product_id', 'prod-19l-can').maybeSingle();
+        if (canInv) {
+          const currentEmpty = Number(canInv.empty_cans || 0);
+          const newEmpty = currentEmpty + completionData.empty_cans_returned;
+          await supabase.from('inventory').update({ empty_cans: newEmpty, updated_at: nowIso }).eq('id', canInv.id);
+
+          await supabase.from('inventory_movements').insert({
+            id: `mov-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            product_id: 'prod-19l-can',
+            movement_type: 'return',
+            stock_type: 'empty',
+            quantity: completionData.empty_cans_returned,
+            previous_stock: currentEmpty,
+            new_stock: newEmpty,
+            reason: `Empty cans retrieved on Delivery ${del.delivery_number}`,
+            reference_type: 'delivery',
+            reference_id: id,
+            user_id: user.id,
+            created_at: nowIso,
+          });
+        }
+      }
+
+      // 6. Update customer cans and balance
+      if (del.customer_id) {
+        const currentHeld = Number(del.customer?.cans_held || 0);
+        const newHeld = Math.max(0, currentHeld + delivered19lCans - completionData.empty_cans_returned);
+
+        const currentBal = Number(del.customer?.outstanding_balance || 0);
+        const newBal = Math.max(0, currentBal + (orderTotal - completionData.payment_collected));
+
+        await supabase.from('customers').update({
+          cans_held: newHeld,
+          outstanding_balance: newBal,
+          updated_at: nowIso,
+        }).eq('id', del.customer_id);
+
+        if (delivered19lCans > 0) {
+          await supabase.from('customer_can_movements').insert({
+            customer_id: del.customer_id,
+            product_id: 'prod-19l-can',
+            movement_type: 'issued',
+            quantity: delivered19lCans,
+            balance_after: currentHeld + delivered19lCans,
+            delivery_id: id,
+            reason: `Issued from Delivery ${del.delivery_number}`,
+            user_id: user.id,
+            created_at: nowIso,
+          });
+        }
+
         if (completionData.empty_cans_returned > 0) {
           await supabase.from('customer_can_movements').insert({
             customer_id: del.customer_id,
             product_id: 'prod-19l-can',
             movement_type: 'returned',
             quantity: completionData.empty_cans_returned,
-            balance_after: Math.max(0, (del.customer?.cans_held || 0) - completionData.empty_cans_returned),
+            balance_after: newHeld,
             delivery_id: id,
             reason: `Return from Delivery ${del.delivery_number}`,
             user_id: user.id,
+            created_at: nowIso,
           });
-
-          // Decrement customer held cans
-          await supabase.from('customers').update({
-            cans_held: Math.max(0, (del.customer?.cans_held || 0) - completionData.empty_cans_returned),
-          }).eq('id', del.customer_id);
         }
 
-        // Record payment if collected
+        if (orderTotal > 0) {
+          await supabase.from('customer_ledger').insert({
+            customer_id: del.customer_id,
+            transaction_type: 'invoice',
+            reference_type: 'order',
+            reference_id: del.order_id || id,
+            debit: orderTotal,
+            credit: 0,
+            balance: currentBal + orderTotal,
+            description: `Order delivery #${del.delivery_number}`,
+            transaction_date: today,
+            created_at: nowIso,
+          });
+        }
+
         if (completionData.payment_collected > 0) {
-          const payId = `pay-${Date.now()}`;
           await supabase.from('payments').insert({
-            id: payId,
+            id: `pay-${Date.now()}`,
             payment_number: `PAY-${Date.now().toString().slice(-6)}`,
             customer_id: del.customer_id,
             order_id: del.order_id,
             delivery_id: id,
             amount: completionData.payment_collected,
             payment_method: completionData.payment_method || 'Cash',
-            payment_date: new Date().toISOString().split('T')[0],
+            payment_date: today,
             received_by: user.id,
+            created_at: nowIso,
           });
 
-          // Update customer ledger
           await supabase.from('customer_ledger').insert({
             customer_id: del.customer_id,
             transaction_type: 'payment',
             reference_type: 'delivery',
             reference_id: id,
+            debit: 0,
             credit: completionData.payment_collected,
-            balance: Math.max(0, (del.customer?.outstanding_balance || 0) - completionData.payment_collected),
+            balance: newBal,
             description: `Cash collection from delivery ${del.delivery_number}`,
-            transaction_date: new Date().toISOString().split('T')[0],
+            transaction_date: today,
+            created_at: nowIso,
           });
-
-          // Update customer outstanding balance
-          await supabase.from('customers').update({
-            outstanding_balance: Math.max(0, (del.customer?.outstanding_balance || 0) - completionData.payment_collected),
-          }).eq('id', del.customer_id);
         }
       }
     }
@@ -1405,10 +1562,22 @@ export const SupabaseDataService = {
   async updateDeliveryStatus(id: string, status: string, reason?: string): Promise<void> {
     const supabase = getSupabaseClient();
     if (supabase) {
+      const { data: existing } = await supabase.from('deliveries').select('status, order_id').eq('id', id).maybeSingle();
+      if (existing?.status === 'delivered') {
+        return; // Disallow reverting or re-triggering completed delivery
+      }
+      if (existing?.status === status) {
+        return;
+      }
       await supabase.from('deliveries').update({
         status,
         failure_reason: reason || null,
+        updated_at: new Date().toISOString(),
       }).eq('id', id);
+
+      if (status === 'delivered' && existing?.order_id) {
+        await supabase.from('orders').update({ order_status: 'completed', updated_at: new Date().toISOString() }).eq('id', existing.order_id);
+      }
     }
   },
 

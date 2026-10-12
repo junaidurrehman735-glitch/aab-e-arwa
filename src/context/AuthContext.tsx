@@ -247,18 +247,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): boolean => {
     if (!user) return false;
     const role = user.role_name || (user.role_id === 'role-owner' ? 'Owner' : user.role_id === 'role-manager' ? 'Manager' : 'Delivery Boy');
+    const isOwner = role === 'Owner' || user.role_id === 'role-owner';
 
-    // 1. Owner has unrestricted access to all modules and financials
-    if (role === 'Owner' || user.role_id === 'role-owner') return true;
-
-    // 2. Manager has operational access only (strictly no financial or user/role management)
-    if (role === 'Manager' || user.role_id === 'role-manager') {
-      const financialOrAdminModules = ['payments', 'expenses', 'staff', 'settings'];
-      if (financialOrAdminModules.includes(module)) return false;
+    // 1. Owner safety invariant: Owner can NEVER lose access to Staff & Permissions or Settings to avoid locking themselves out
+    if (isOwner && (module === 'staff' || module === 'settings') && (action === 'can_view' || action === 'can_edit')) {
       return true;
     }
 
-    // 3. Delivery Boy can ONLY access assigned deliveries/orders, customer info, delivery status, and returned cans
+    // 2. Strict Role Boundary Guard for Non-Owners:
+    // Manager and Delivery Boy can NEVER access financial or staff-management functionality
+    if (!isOwner) {
+      if (['payments', 'expenses', 'staff'].includes(module)) {
+        return false;
+      }
+    }
+
+    // Delivery Boy boundary guard: can never access reports, audit, production, inventory, settings, or delete anything
+    if (role === 'Delivery Boy' || user.role_id === 'role-delivery') {
+      if (['reports', 'audit', 'production', 'inventory', 'settings'].includes(module)) {
+        return false;
+      }
+      if (action === 'can_delete' || action === 'can_approve') {
+        return false;
+      }
+    }
+
+    // 3. Check dynamically configured permissions matrix
+    const perm = permissions.find((p) => p.module === module);
+    if (perm) {
+      return perm[action] === 1;
+    }
+
+    // 4. Default fallback based on role baseline if permissions array hasn't loaded yet
+    if (isOwner) return true;
+    if (role === 'Manager' || user.role_id === 'role-manager') {
+      const financialOrAdmin = ['payments', 'expenses', 'staff', 'settings'].includes(module);
+      return !financialOrAdmin;
+    }
     if (role === 'Delivery Boy' || user.role_id === 'role-delivery') {
       if (module === 'dashboard' && action === 'can_view') return true;
       if (module === 'deliveries' && (action === 'can_view' || action === 'can_create' || action === 'can_edit')) return true;
@@ -267,9 +292,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return false;
     }
 
-    const perm = permissions.find((p) => p.module === module);
-    if (!perm) return false;
-    return perm[action] === 1;
+    return false;
   };
 
   return (

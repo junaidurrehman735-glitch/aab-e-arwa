@@ -6,6 +6,10 @@ import {
   normalizeRoleName,
   roleNameToId,
   getRolePermissions,
+  saveRolePermissions,
+  getIdempotencyRecord,
+  saveIdempotencyRecord,
+  runWithLock,
 } from './db.ts';
 import type { User, Customer, Product, Delivery, Order } from '../types/index.ts';
 
@@ -52,6 +56,56 @@ async function getAuthUserFromRequest(req: Request): Promise<User | null> {
     if (user) return user;
   }
 
+  return null;
+}
+
+// -----------------------------------------------------------------------------
+// Granular Permission Authorization Helper for Server Endpoints
+// -----------------------------------------------------------------------------
+async function authorizePermission(
+  req: Request,
+  res: Response,
+  module: string,
+  action: 'can_view' | 'can_create' | 'can_edit' | 'can_approve' | 'can_delete'
+): Promise<User | null> {
+  const authUser = await getAuthUserFromRequest(req);
+  if (!authUser) {
+    res.status(401).json({ message: 'Authentication required' });
+    return null;
+  }
+
+  const role = authUser.role_name || (authUser.role_id === 'role-owner' ? 'Owner' : authUser.role_id === 'role-manager' ? 'Manager' : 'Delivery Boy');
+  const isOwner = role === 'Owner' || authUser.role_id === 'role-owner';
+
+  // 1. Invariant: Non-Owners NEVER have access to financial tables or staff management
+  if (!isOwner && ['payments', 'expenses', 'staff'].includes(module)) {
+    res.status(403).json({ message: `Access Denied: ${role} role is unauthorized to access ${module}.` });
+    return null;
+  }
+
+  // 2. Invariant: Delivery Boy CANNOT access financial reports, audit logs, or settings
+  if ((role === 'Delivery Boy' || authUser.role_id === 'role-delivery') &&
+      ['reports', 'audit', 'settings', 'production', 'inventory'].includes(module)) {
+    res.status(403).json({ message: `Access Denied: Delivery Boy cannot access ${module}.` });
+    return null;
+  }
+
+  // 3. Invariant: Owner always maintains staff & settings management
+  if (isOwner && (module === 'staff' || module === 'settings') && (action === 'can_view' || action === 'can_edit')) {
+    return authUser;
+  }
+
+  // 4. Resolve dynamically configured permission matrix for this role
+  const permissions = getRolePermissions(authUser.role_id);
+  const perm = permissions.find((p) => p.module === module);
+
+  if (perm && perm[action] === 1) {
+    return authUser;
+  }
+
+  res.status(403).json({
+    message: `Access Denied: ${role} role lacks ${action.replace('_', ' ')} permission for ${module}.`
+  });
   return null;
 }
 
@@ -250,21 +304,67 @@ apiRouter.get('/roles/:roleId/permissions', (req: Request, res: Response) => {
   return res.json(permissions);
 });
 
-apiRouter.put('/roles/:roleId/permissions', (req: Request, res: Response) => {
-  return res.json({ success: true });
+apiRouter.put('/roles/:roleId/permissions', async (req: Request, res: Response) => {
+  try {
+    const authUser = await getAuthUserFromRequest(req);
+    if (!authUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+    const isOwner = authUser.role_name === 'Owner' || authUser.role_id === 'role-owner';
+    if (!isOwner) {
+      return res.status(403).json({ message: 'Access Denied: Only Owner can modify role permissions.' });
+    }
+
+    const { roleId } = req.params;
+    const permissions: Permission[] = req.body.permissions || [];
+    if (!Array.isArray(permissions)) {
+      return res.status(400).json({ message: 'Permissions array required' });
+    }
+
+    // Save to server database
+    saveRolePermissions(roleId, permissions);
+
+    // Try to sync to Supabase permissions table if available
+    const supabase = getServerSupabase();
+    if (supabase) {
+      for (const p of permissions) {
+        try {
+          await supabase.from('permissions').upsert({
+            id: `${roleId}:${p.module}`,
+            role_id: roleId,
+            module: p.module,
+            can_view: Number(p.can_view ?? 0),
+            can_create: Number(p.can_create ?? 0),
+            can_edit: Number(p.can_edit ?? 0),
+            can_approve: Number(p.can_approve ?? 0),
+            can_delete: Number(p.can_delete ?? 0),
+          }, { onConflict: 'role_id,module' });
+        } catch (_) {}
+      }
+    }
+
+    return res.json({ success: true, permissions: getRolePermissions(roleId) });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message || 'Failed to update permissions' });
+  }
 });
 
 // -----------------------------------------------------------------------------
 // 3. STAFF MANAGEMENT (Owner-Only)
 // -----------------------------------------------------------------------------
 
-apiRouter.get('/staff', (req: Request, res: Response) => {
+apiRouter.get('/staff', async (req: Request, res: Response) => {
+  const authorized = await authorizePermission(req, res, 'staff', 'can_view');
+  if (!authorized) return;
   const db = loadDatabase();
   return res.json(db.users);
 });
 
 apiRouter.post('/staff', async (req: Request, res: Response) => {
   try {
+    const authorized = await authorizePermission(req, res, 'staff', 'can_create');
+    if (!authorized) return;
+
     const { name, email, role_id, phone, password } = req.body;
     if (!name || !email) {
       return res.status(400).json({ message: 'Name and Email are required' });
@@ -338,6 +438,9 @@ apiRouter.post('/staff', async (req: Request, res: Response) => {
 
 apiRouter.put('/staff/:id', async (req: Request, res: Response) => {
   try {
+    const authorized = await authorizePermission(req, res, 'staff', 'can_edit');
+    if (!authorized) return;
+
     const { id } = req.params;
     const updates = req.body;
     const db = loadDatabase();
@@ -509,6 +612,9 @@ apiRouter.get('/customers/:id', async (req: Request, res: Response) => {
 
 apiRouter.post('/customers', async (req: Request, res: Response) => {
   try {
+    const authorized = await authorizePermission(req, res, 'customers', 'can_create');
+    if (!authorized) return;
+
     const customerData = req.body;
     if (!customerData.name || !customerData.name.trim()) {
       return res.status(400).json({ message: 'Customer name is required' });
@@ -520,68 +626,159 @@ apiRouter.post('/customers', async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Customer address is required' });
     }
 
-    const id = customerData.id || `cust-${Date.now()}`;
-    const cleanCustomer: Record<string, any> = {
-      id,
-      name: customerData.name.trim(),
-      contact_person: customerData.contact_person || '',
-      phone: customerData.phone.trim(),
-      whatsapp: customerData.whatsapp || '',
-      address: customerData.address.trim(),
-      area: customerData.area || 'Chiltan Scheme Airport Road',
-      area_access: customerData.area_access || 'Specific Area',
-      customer_type_id: customerData.customer_type_id || 'ct-home',
-      selling_rate: Number(customerData.selling_rate || 220),
-      payment_type: customerData.payment_type || 'Cash',
-      cash_status: customerData.cash_status || 'Cash on Delivery',
-      credit_limit: Number(customerData.credit_limit || 0),
-      outstanding_balance: Number(customerData.outstanding_balance || 0),
-      cans_held: Number(customerData.cans_held || customerData.company_cans || 0),
-      net_deposit_amount: Number(customerData.net_deposit_amount || 0),
-      notes: customerData.notes || '',
-      delivery_instructions: customerData.delivery_instructions || '',
-      status: customerData.status || 'active',
-      created_at: new Date().toISOString(),
-    };
+    // Backend Idempotency & Concurrency Lock
+    const idempotencyKey = (req.headers['x-idempotency-key'] as string) || (customerData.idempotency_key as string);
+    const cleanPhone = customerData.phone.trim().replace(/\s+/g, '');
+    const cleanName = customerData.name.trim().toLowerCase();
+    const cleanAddress = customerData.address.trim().toLowerCase();
+    const lockKey = idempotencyKey || `cust-lock-${cleanPhone}-${cleanName}`;
 
-    // 1. Always commit to server central database immediately (single source of truth)
-    const db = loadDatabase();
-    db.customers = db.customers.filter(c => c.id !== id);
-    db.customers.unshift(cleanCustomer as Customer);
-    saveDatabase(db);
+    return await runWithLock(lockKey, async () => {
+      // 1. Check cached idempotency response in memory/database
+      if (idempotencyKey) {
+        const cached = getIdempotencyRecord(idempotencyKey);
+        if (cached) {
+          console.log(`[IDEMPOTENCY] Returning cached customer response for key: ${idempotencyKey}`);
+          return res.status(200).json(cached);
+        }
+      }
 
-    // 2. Also sync to Supabase if configured
-    const supabase = getServerSupabase();
-    if (supabase) {
-      try {
+      const supabase = getServerSupabase();
+      const customerId = customerData.id || `cust-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+      // 2. Database safety check: Check Supabase directly for already-existing customer with same ID or rapid submission
+      if (supabase) {
+        // If an explicit client ID was provided:
+        if (customerData.id) {
+          const { data: existingCust } = await supabase
+            .from('customers')
+            .select('*')
+            .eq('id', customerData.id)
+            .maybeSingle();
+
+          if (existingCust) {
+            console.log(`[IDEMPOTENCY] Customer already exists with ID: ${customerData.id}`);
+            if (idempotencyKey) {
+              saveIdempotencyRecord(idempotencyKey, 'create_customer', existingCust);
+            }
+            return res.status(200).json(existingCust);
+          }
+        }
+
+        // Check for rapid double-submission in Supabase (created in the last 15 seconds with identical phone, name, and address)
+        const fifteenSecAgo = new Date(Date.now() - 15000).toISOString();
+        const { data: recentCust } = await supabase
+          .from('customers')
+          .select('*')
+          .eq('phone', customerData.phone.trim())
+          .eq('name', customerData.name.trim())
+          .eq('address', customerData.address.trim())
+          .gte('created_at', fifteenSecAgo)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (recentCust) {
+          console.log(`[IDEMPOTENCY] Detected rapid duplicate submission for ${customerData.name} - returning existing record (${recentCust.id})`);
+          if (idempotencyKey) {
+            saveIdempotencyRecord(idempotencyKey, 'create_customer', recentCust);
+          }
+          return res.status(200).json(recentCust);
+        }
+      }
+
+      // Check central database cache for same ID
+      const db = loadDatabase();
+      const existingInDb = db.customers.find(c => c.id === customerId);
+      if (existingInDb) {
+        if (idempotencyKey) {
+          saveIdempotencyRecord(idempotencyKey, 'create_customer', existingInDb);
+        }
+        return res.status(200).json(existingInDb);
+      }
+
+      const cleanCustomer: Record<string, any> = {
+        id: customerId,
+        name: customerData.name.trim(),
+        contact_person: customerData.contact_person || '',
+        phone: customerData.phone.trim(),
+        whatsapp: customerData.whatsapp || '',
+        address: customerData.address.trim(),
+        area: customerData.area || 'Chiltan Scheme Airport Road',
+        area_access: customerData.area_access || 'Specific Area',
+        customer_type_id: customerData.customer_type_id || 'ct-home',
+        selling_rate: Number(customerData.selling_rate || 220),
+        payment_type: customerData.payment_type || 'Cash',
+        cash_status: customerData.cash_status || 'Cash on Delivery',
+        credit_limit: Number(customerData.credit_limit || 0),
+        outstanding_balance: Number(customerData.outstanding_balance || 0),
+        cans_held: Number(customerData.cans_held || customerData.company_cans || 0),
+        net_deposit_amount: Number(customerData.net_deposit_amount || 0),
+        notes: customerData.notes || '',
+        delivery_instructions: customerData.delivery_instructions || '',
+        status: customerData.status || 'active',
+        created_at: new Date().toISOString(),
+      };
+
+      // 3. Insert into Supabase (single source of truth)
+      if (supabase) {
         const { data, error } = await supabase.from('customers').insert(cleanCustomer).select().maybeSingle();
         if (error) {
-          console.warn('[API /customers] Supabase INSERT notice (saved in central DB):', error.message || error);
-        } else if (data) {
-          const inserted = data as Customer;
-          const idx = db.customers.findIndex(c => c.id === id);
-          if (idx !== -1) {
-            db.customers[idx] = inserted;
-            saveDatabase(db);
-          }
-          console.log(`[CUSTOMER] Created & verified in Supabase: ${inserted.name} (${inserted.id})`);
-          return res.status(201).json(inserted);
+          console.error('[API /customers] Supabase INSERT error:', error.message || error);
+          return res.status(500).json({ message: error.message || 'Failed to insert customer into Supabase' });
         }
-      } catch (err: any) {
-        console.warn('[API /customers] Supabase INSERT exception:', err?.message || err);
-      }
-    }
 
-    console.log(`[CUSTOMER] Created & saved in central DB: ${cleanCustomer.name} (${cleanCustomer.id})`);
-    return res.status(201).json(cleanCustomer);
+        const inserted = (data || cleanCustomer) as Customer;
+
+        // Sync with central database cache
+        db.customers = db.customers.filter(c => c.id !== inserted.id);
+        db.customers.unshift(inserted);
+        saveDatabase(db);
+
+        // Save idempotency record
+        if (idempotencyKey) {
+          saveIdempotencyRecord(idempotencyKey, 'create_customer', inserted);
+        }
+
+        // Record in audit_logs for traceability
+        try {
+          await supabase.from('audit_logs').insert({
+            id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            action: 'create_customer',
+            module: 'customers',
+            record_ref: inserted.id,
+            details: { name: inserted.name, phone: inserted.phone, area: inserted.area, idempotency_key: idempotencyKey || null },
+            created_at: new Date().toISOString(),
+          });
+        } catch (_) {}
+
+        console.log(`[CUSTOMER] Created & verified in Supabase: ${inserted.name} (${inserted.id})`);
+        return res.status(201).json(inserted);
+      }
+
+      // If no Supabase (fallback mode only):
+      db.customers = db.customers.filter(c => c.id !== cleanCustomer.id);
+      db.customers.unshift(cleanCustomer as Customer);
+      saveDatabase(db);
+
+      if (idempotencyKey) {
+        saveIdempotencyRecord(idempotencyKey, 'create_customer', cleanCustomer);
+      }
+
+      console.log(`[CUSTOMER] Created & saved in central DB: ${cleanCustomer.name} (${cleanCustomer.id})`);
+      return res.status(201).json(cleanCustomer);
+    });
   } catch (err: any) {
-    console.warn('[API /customers] Exception:', err?.message || err);
-    return res.status(500).json({ message: err.message });
+    console.error('[API /customers] Exception:', err?.message || err);
+    return res.status(500).json({ message: err.message || 'Internal server error creating customer' });
   }
 });
 
 apiRouter.put('/customers/:id', async (req: Request, res: Response) => {
   try {
+    const authorized = await authorizePermission(req, res, 'customers', 'can_edit');
+    if (!authorized) return;
+
     const { id } = req.params;
     const updates = req.body;
     const cleanUpdates: Record<string, any> = { ...updates, updated_at: new Date().toISOString() };
@@ -589,7 +786,36 @@ apiRouter.put('/customers/:id', async (req: Request, res: Response) => {
     delete cleanUpdates.customer_type_name;
     delete cleanUpdates.company_cans;
 
-    // 1. Always update server central database
+    const supabase = getServerSupabase();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('customers')
+        .update(cleanUpdates)
+        .eq('id', id)
+        .select()
+        .maybeSingle();
+
+      if (error) {
+        console.error('[API /customers/:id] Supabase UPDATE error:', error.message || error);
+        return res.status(500).json({ message: error.message || 'Failed to update customer in Supabase' });
+      }
+      if (!data) {
+        return res.status(404).json({ message: 'Customer not found in Supabase' });
+      }
+
+      // Update central DB cache
+      const db = loadDatabase();
+      const idx = db.customers.findIndex(c => c.id === id);
+      if (idx !== -1) {
+        db.customers[idx] = { ...db.customers[idx], ...(data as Customer) };
+      } else {
+        db.customers.unshift(data as Customer);
+      }
+      saveDatabase(db);
+      console.log(`[CUSTOMER] Updated & verified in Supabase: (${id})`);
+      return res.json({ success: true, customer: data });
+    }
+
     const db = loadDatabase();
     const idx = db.customers.findIndex(c => c.id === id);
     if (idx === -1) {
@@ -597,40 +823,33 @@ apiRouter.put('/customers/:id', async (req: Request, res: Response) => {
     }
     db.customers[idx] = { ...db.customers[idx], ...cleanUpdates };
     saveDatabase(db);
-
-    // 2. Also sync to Supabase if configured
-    const supabase = getServerSupabase();
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.from('customers').update(cleanUpdates).eq('id', id).select().maybeSingle();
-        if (error) {
-          console.warn('[API /customers/:id] Supabase UPDATE notice (updated in central DB):', error.message || error);
-        } else if (data) {
-          db.customers[idx] = { ...db.customers[idx], ...(data as Customer) };
-          saveDatabase(db);
-          console.log(`[CUSTOMER] Updated & verified in Supabase: (${id})`);
-          return res.json({ success: true, customer: db.customers[idx] });
-        }
-      } catch (err: any) {
-        console.warn('[API /customers/:id] Supabase UPDATE exception:', err?.message || err);
-      }
-    }
-
-    console.log(`[CUSTOMER] Updated in central DB: (${id})`);
     return res.json({ success: true, customer: db.customers[idx] });
   } catch (err: any) {
-    console.warn('[API /customers/:id] Exception:', err?.message || err);
+    console.error('[API /customers/:id] Exception:', err?.message || err);
     return res.status(500).json({ message: err.message });
   }
 });
 
 apiRouter.delete('/customers/:id', async (req: Request, res: Response) => {
   try {
+    const authorized = await authorizePermission(req, res, 'customers', 'can_delete');
+    if (!authorized) return;
+
     const { id } = req.params;
     const supabase = getServerSupabase();
     let isArchived = false;
 
     if (supabase) {
+      // Check if customer exists in Supabase
+      const { data: existing } = await supabase.from('customers').select('id, name').eq('id', id).maybeSingle();
+      if (!existing) {
+        // Idempotent delete: customer already removed or does not exist
+        const db = loadDatabase();
+        db.customers = db.customers.filter(c => c.id !== id);
+        saveDatabase(db);
+        return res.json({ success: true, message: 'Customer profile already removed or not found.' });
+      }
+
       // Check if customer has historical records: orders, deliveries, payments, or ledger
       const [ordRes, delRes, payRes, ledgRes] = await Promise.all([
         supabase.from('orders').select('id').eq('customer_id', id).limit(1),
@@ -1177,151 +1396,163 @@ apiRouter.post('/orders', async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'At least one product item is required' });
     }
 
-    const supabase = getServerSupabase();
-    const id = `ord-${Date.now()}`;
-    const orderNumber = `ORD-${Date.now().toString().slice(-6)}`;
-    const total_amount = (orderData.items || []).reduce(
-      (s: number, it: any) => s + (Number(it.quantity || 0) * Number(it.unit_price || 0)),
-      0
-    );
+    // Backend Idempotency & Concurrency Lock
+    const idempotencyKey = (req.headers['x-idempotency-key'] as string) || (orderData.idempotency_key as string);
+    const lockKey = idempotencyKey || `order-lock-${orderData.customer_id}-${orderData.delivery_date || ''}`;
 
-    let customerId = orderData.customer_id;
-    const nowIso = new Date().toISOString();
-    const deliveryDate = orderData.delivery_date || nowIso.split('T')[0];
-
-    // Ensure customer exists in Supabase so foreign key constraint orders_customer_id_fkey succeeds
-    if (supabase) {
-      const { data: existingCust } = await supabase
-        .from('customers')
-        .select('id, name, phone, area, address')
-        .eq('id', customerId)
-        .maybeSingle();
-
-      if (!existingCust && (orderData.customer || orderData.customer_name)) {
-        const tempCustData = {
-          id: customerId,
-          name: (orderData.customer?.name || orderData.customer_name || 'Walk-in Customer').trim(),
-          phone: (orderData.customer?.phone || orderData.customer_phone || '03000000000').trim(),
-          address: (orderData.customer?.address || orderData.delivery_address || 'Quetta').trim(),
-          area: orderData.customer?.area || orderData.customer_area || 'Main Jinnah Road',
-          customer_type_id: orderData.customer?.customer_type_id || 'ct-other',
-          selling_rate: Number(orderData.items[0]?.unit_price || 220),
-          status: 'active',
-          created_at: nowIso,
-        };
-        const { error: custErr } = await supabase.from('customers').insert(tempCustData);
-        if (custErr) {
-          console.warn('[API /orders] Temp customer auto-create warning:', custErr.message);
+    return await runWithLock(lockKey, async () => {
+      if (idempotencyKey) {
+        const existingResponse = getIdempotencyRecord(idempotencyKey);
+        if (existingResponse) {
+          console.log(`[IDEMPOTENCY] Returning cached response for key: ${idempotencyKey}`);
+          return res.status(200).json(existingResponse);
         }
       }
-    }
 
-    // 1. Prepare exact Supabase columns for orders table
-    const cleanOrderRow = {
-      id,
-      order_number: orderNumber,
-      customer_id: customerId,
-      total_amount,
-      payment_type: orderData.payment_type || 'Cash',
-      payment_status: 'pending',
-      order_status: 'confirmed',
-      delivery_date: deliveryDate,
-      delivery_address: orderData.delivery_address || orderData.customer?.address || '',
-      notes: orderData.notes || '',
-      created_by: orderData.created_by || 'Owner',
-      created_at: nowIso,
-    };
+      const supabase = getServerSupabase();
+      const id = `ord-${Date.now()}`;
+      const orderNumber = `ORD-${Date.now().toString().slice(-6)}`;
+      const total_amount = (orderData.items || []).reduce(
+        (s: number, it: any) => s + (Number(it.quantity || 0) * Number(it.unit_price || 0)),
+        0
+      );
 
-    if (supabase) {
-      // INSERT Order into Supabase
-      const { error: orderInsertErr } = await supabase.from('orders').insert(cleanOrderRow);
-      if (orderInsertErr) {
-        console.error('[API /orders] Supabase orders INSERT error:', orderInsertErr);
-        return res.status(500).json({ message: `Supabase order error: ${orderInsertErr.message}` });
+      let customerId = orderData.customer_id;
+      const nowIso = new Date().toISOString();
+      const deliveryDate = orderData.delivery_date || nowIso.split('T')[0];
+
+      // Fast check in memory/central DB first to avoid unnecessary slow sequential queries
+      const db = loadDatabase();
+      const existingLocalCust = db.customers.find(c => c.id === customerId);
+
+      if (supabase && !existingLocalCust && (orderData.customer || orderData.customer_name)) {
+        const { data: existingCust } = await supabase
+          .from('customers')
+          .select('id, name, phone, area, address')
+          .eq('id', customerId)
+          .maybeSingle();
+
+        if (!existingCust) {
+          const tempCustData = {
+            id: customerId,
+            name: (orderData.customer?.name || orderData.customer_name || 'Walk-in Customer').trim(),
+            phone: (orderData.customer?.phone || orderData.customer_phone || '03000000000').trim(),
+            address: (orderData.customer?.address || orderData.delivery_address || 'Quetta').trim(),
+            area: orderData.customer?.area || orderData.customer_area || 'Main Jinnah Road',
+            customer_type_id: orderData.customer?.customer_type_id || 'ct-other',
+            selling_rate: Number(orderData.items[0]?.unit_price || 220),
+            status: 'active',
+            created_at: nowIso,
+          };
+          const { error: custErr } = await supabase.from('customers').insert(tempCustData);
+          if (custErr) {
+            console.warn('[API /orders] Temp customer auto-create warning:', custErr.message);
+          }
+        }
       }
 
-      // 2. INSERT Order Items into Supabase
-      const cleanItems = orderData.items.map((it: any) => ({
-        id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        order_id: id,
-        product_id: it.product_id,
-        quantity: Number(it.quantity || 1),
-        unit_price: Number(it.unit_price || 0),
-        total_price: Number(it.quantity || 1) * Number(it.unit_price || 0),
-      }));
-
-      const { error: itemsInsertErr } = await supabase.from('order_items').insert(cleanItems);
-      if (itemsInsertErr) {
-        console.error('[API /orders] Supabase order_items INSERT error:', itemsInsertErr);
-      }
-
-      // 3. Automatically create corresponding Delivery record in Supabase deliveries table
-      const deliveryId = `del-${Date.now()}`;
-      const deliveryNumber = `DEL-${Date.now().toString().slice(-6)}`;
-      const cleanDeliveryRow = {
-        id: deliveryId,
-        delivery_number: deliveryNumber,
-        order_id: id,
+      // 1. Prepare exact Supabase columns for orders table
+      const cleanOrderRow = {
+        id,
+        order_number: orderNumber,
         customer_id: customerId,
-        driver_id: orderData.driver_id || null,
-        vehicle: orderData.vehicle || 'Van #1',
+        total_amount,
+        payment_type: orderData.payment_type || 'Cash',
+        payment_status: 'pending',
+        order_status: 'confirmed',
         delivery_date: deliveryDate,
-        delivery_time: orderData.delivery_time || 'Morning',
-        status: 'assigned',
-        empty_cans_returned: 0,
-        payment_collected: 0,
-        payment_method: orderData.payment_type || 'Cash',
+        delivery_address: orderData.delivery_address || orderData.customer?.address || '',
         notes: orderData.notes || '',
+        created_by: orderData.created_by || 'Owner',
         created_at: nowIso,
       };
 
-      const { error: delInsertErr } = await supabase.from('deliveries').insert(cleanDeliveryRow);
-      if (delInsertErr) {
-        console.error('[API /orders] Supabase auto deliveries INSERT error:', delInsertErr);
-      } else {
-        // Also insert delivery_items
+      if (supabase) {
+        // INSERT Order into Supabase
+        const { error: orderInsertErr } = await supabase.from('orders').insert(cleanOrderRow);
+        if (orderInsertErr) {
+          console.error('[API /orders] Supabase orders INSERT error:', orderInsertErr);
+          return res.status(500).json({ message: `Supabase order error: ${orderInsertErr.message}` });
+        }
+
+        // 2. Prepare Order Items & Delivery rows
+        const cleanItems = orderData.items.map((it: any) => ({
+          id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          order_id: id,
+          product_id: it.product_id,
+          quantity: Number(it.quantity || 1),
+          unit_price: Number(it.unit_price || 0),
+          total_price: Number(it.quantity || 1) * Number(it.unit_price || 0),
+        }));
+
+        const deliveryId = `del-${Date.now()}`;
+        const deliveryNumber = `DEL-${Date.now().toString().slice(-6)}`;
+        const cleanDeliveryRow = {
+          id: deliveryId,
+          delivery_number: deliveryNumber,
+          order_id: id,
+          customer_id: customerId,
+          driver_id: orderData.driver_id || null,
+          vehicle: orderData.vehicle || 'Van #1',
+          delivery_date: deliveryDate,
+          delivery_time: orderData.delivery_time || 'Morning',
+          status: 'assigned',
+          empty_cans_returned: 0,
+          payment_collected: 0,
+          payment_method: orderData.payment_type || 'Cash',
+          notes: orderData.notes || '',
+          created_at: nowIso,
+        };
+
         const delItems = orderData.items.map((it: any) => ({
           id: `ditem-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           delivery_id: deliveryId,
           product_id: it.product_id,
           quantity: Number(it.quantity || 1),
         }));
-        try {
-          await supabase.from('delivery_items').insert(delItems);
-        } catch (_) {}
+
+        // Execute items & delivery in parallel for fast performance
+        await Promise.all([
+          supabase.from('order_items').insert(cleanItems),
+          supabase.from('deliveries').insert(cleanDeliveryRow),
+          supabase.from('delivery_items').insert(delItems),
+        ]);
+
+        console.log(`[ORDER] Created & saved in Supabase: #${orderNumber} (${id}) with Delivery: #${deliveryNumber}`);
       }
 
-      console.log(`[ORDER] Created & saved in Supabase: #${orderNumber} (${id}) with Delivery: #${deliveryNumber}`);
-    }
+      // Keep central database aligned
+      const cust = db.customers.find(c => c.id === customerId);
+      const newOrderFull = {
+        ...cleanOrderRow,
+        customer_name: cust?.name || orderData.customer_name || '',
+        customer_phone: cust?.phone || orderData.customer_phone || '',
+        customer_area: cust?.area || orderData.customer_area || '',
+        items: orderData.items || [],
+        created_at: nowIso,
+      };
+      db.orders.unshift(newOrderFull);
 
-    // Keep central database aligned
-    const db = loadDatabase();
-    const cust = db.customers.find(c => c.id === customerId);
-    const newOrderFull = {
-      ...cleanOrderRow,
-      customer_name: cust?.name || orderData.customer_name || '',
-      customer_phone: cust?.phone || orderData.customer_phone || '',
-      customer_area: cust?.area || orderData.customer_area || '',
-      items: orderData.items || [],
-      created_at: nowIso,
-    };
-    db.orders.unshift(newOrderFull);
+      for (const it of orderData.items || []) {
+        db.order_items.push({
+          id: `oi-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          order_id: id,
+          product_id: it.product_id,
+          quantity: it.quantity,
+          unit_price: it.unit_price,
+          total_price: it.quantity * it.unit_price,
+        });
+      }
 
-    // Save order items in central db
-    for (const it of orderData.items || []) {
-      db.order_items.push({
-        id: `oi-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        order_id: id,
-        product_id: it.product_id,
-        quantity: it.quantity,
-        unit_price: it.unit_price,
-        total_price: it.quantity * it.unit_price,
-      });
-    }
+      saveDatabase(db);
 
-    saveDatabase(db);
+      const resultPayload = { id, orderNumber, success: true };
+      if (idempotencyKey) {
+        saveIdempotencyRecord(idempotencyKey, 'create_order', resultPayload);
+      }
 
-    return res.status(201).json({ id, orderNumber });
+      return res.status(201).json(resultPayload);
+    });
   } catch (err: any) {
     console.error('[API /orders] Exception:', err);
     return res.status(500).json({ message: err.message });
@@ -1512,112 +1743,152 @@ apiRouter.get('/deliveries', async (req: Request, res: Response) => {
 apiRouter.post('/deliveries/create-for-order', async (req: Request, res: Response) => {
   try {
     const params = req.body;
-    const supabase = getServerSupabase();
-
     if (!params.order_id) {
       return res.status(400).json({ message: 'Order ID is required' });
     }
 
-    let customer_id = '';
-    let deliveryDate = params.delivery_date || new Date().toISOString().split('T')[0];
-    const nowIso = new Date().toISOString();
+    const idempotencyKey = (req.headers['x-idempotency-key'] as string) || (params.idempotency_key as string);
+    const lockKey = `dispatch-order-${params.order_id}`;
 
-    if (supabase) {
-      // Check if a delivery already exists for this order: if so, update assignment!
-      const { data: existingDel } = await supabase
-        .from('deliveries')
-        .select('id')
-        .eq('order_id', params.order_id)
-        .maybeSingle();
-
-      if (existingDel) {
-        const { error: updErr } = await supabase
-          .from('deliveries')
-          .update({
-            driver_id: params.driver_id || null,
-            vehicle: params.vehicle || 'Van #1',
-            delivery_time: params.delivery_time || 'Morning',
-            status: 'assigned',
-            updated_at: nowIso,
-          })
-          .eq('id', existingDel.id);
-
-        if (updErr) {
-          console.error('[API /deliveries/create-for-order] Supabase update error:', updErr);
-          return res.status(500).json({ message: updErr.message });
+    return await runWithLock(lockKey, async () => {
+      if (idempotencyKey) {
+        const cached = getIdempotencyRecord(idempotencyKey);
+        if (cached) {
+          console.log(`[IDEMPOTENCY] Returning cached dispatch response for key: ${idempotencyKey}`);
+          return res.status(200).json(cached);
         }
-
-        // Update order status to dispatched
-        await supabase.from('orders').update({ order_status: 'dispatched', updated_at: nowIso }).eq('id', params.order_id);
-
-        return res.json({ id: existingDel.id, updated: true });
       }
 
-      // Find order to extract customer_id and delivery_date
-      const { data: ord } = await supabase
-        .from('orders')
-        .select('customer_id, delivery_date')
-        .eq('id', params.order_id)
-        .maybeSingle();
+      const supabase = getServerSupabase();
+      let customer_id = '';
+      let deliveryDate = params.delivery_date || new Date().toISOString().split('T')[0];
+      const nowIso = new Date().toISOString();
 
-      if (ord) {
-        customer_id = ord.customer_id;
-        if (ord.delivery_date) deliveryDate = ord.delivery_date;
+      if (supabase) {
+        // Check order status: if already delivered or completed, do not dispatch
+        const { data: ord } = await supabase
+          .from('orders')
+          .select('id, customer_id, delivery_date, order_status')
+          .eq('id', params.order_id)
+          .maybeSingle();
+
+        if (ord?.order_status === 'completed' || ord?.order_status === 'delivered') {
+          const payload = { message: 'Order is already completed/delivered', updated: false, order_id: params.order_id };
+          if (idempotencyKey) saveIdempotencyRecord(idempotencyKey, 'dispatch_order', payload);
+          return res.status(200).json(payload);
+        }
+
+        if (ord) {
+          customer_id = ord.customer_id;
+          if (ord.delivery_date) deliveryDate = ord.delivery_date;
+        }
+
+        // Check if a delivery already exists for this order
+        const { data: existingDel } = await supabase
+          .from('deliveries')
+          .select('id, status')
+          .eq('order_id', params.order_id)
+          .maybeSingle();
+
+        if (existingDel) {
+          if (existingDel.status !== 'delivered') {
+            await supabase
+              .from('deliveries')
+              .update({
+                driver_id: params.driver_id || null,
+                vehicle: params.vehicle || 'Van #1',
+                delivery_time: params.delivery_time || 'Morning',
+                status: 'assigned',
+                updated_at: nowIso,
+              })
+              .eq('id', existingDel.id);
+
+            await supabase.from('orders').update({ order_status: 'dispatched', updated_at: nowIso }).eq('id', params.order_id);
+          }
+
+          const payload = { id: existingDel.id, updated: true, order_id: params.order_id };
+          if (idempotencyKey) saveIdempotencyRecord(idempotencyKey, 'dispatch_order', payload);
+          return res.status(200).json(payload);
+        }
+
+        const id = `del-${Date.now()}`;
+        const deliveryNumber = `DEL-${Date.now().toString().slice(-6)}`;
+        const cleanDelRow = {
+          id,
+          delivery_number: deliveryNumber,
+          order_id: params.order_id,
+          customer_id: customer_id || 'cust-unknown',
+          driver_id: params.driver_id || null,
+          vehicle: params.vehicle || 'Van #1',
+          delivery_date: deliveryDate,
+          delivery_time: params.delivery_time || 'Morning',
+          status: 'assigned',
+          empty_cans_returned: 0,
+          payment_collected: 0,
+          notes: params.notes || '',
+          created_at: nowIso,
+        };
+
+        const { error: insErr } = await supabase.from('deliveries').insert(cleanDelRow);
+        if (insErr) {
+          console.error('[API /deliveries/create-for-order] Supabase insert error:', insErr);
+          return res.status(500).json({ message: insErr.message });
+        }
+
+        await supabase.from('orders').update({ order_status: 'dispatched', updated_at: nowIso }).eq('id', params.order_id);
+
+        const payload = { id, created: true, order_id: params.order_id };
+        if (idempotencyKey) saveIdempotencyRecord(idempotencyKey, 'dispatch_order', payload);
+        return res.status(201).json(payload);
+      }
+
+      // Central DB fallback
+      const db = loadDatabase();
+      const ord = db.orders.find(o => o.id === params.order_id);
+      if (ord?.order_status === 'completed' || ord?.order_status === 'delivered') {
+        const payload = { message: 'Order is already delivered', updated: false };
+        if (idempotencyKey) saveIdempotencyRecord(idempotencyKey, 'dispatch_order', payload);
+        return res.status(200).json(payload);
+      }
+
+      const existingDel = db.deliveries.find(d => d.order_id === params.order_id);
+      if (existingDel) {
+        if (existingDel.status !== 'delivered') {
+          existingDel.driver_id = params.driver_id;
+          existingDel.vehicle = params.vehicle || 'Van #1';
+          existingDel.delivery_time = params.delivery_time || 'Morning';
+          if (ord) ord.order_status = 'dispatched';
+          saveDatabase(db);
+        }
+        const payload = { id: existingDel.id, updated: true };
+        if (idempotencyKey) saveIdempotencyRecord(idempotencyKey, 'dispatch_order', payload);
+        return res.status(200).json(payload);
       }
 
       const id = `del-${Date.now()}`;
       const deliveryNumber = `DEL-${Date.now().toString().slice(-6)}`;
-      const cleanDelRow = {
+      const newDelivery = {
         id,
         delivery_number: deliveryNumber,
         order_id: params.order_id,
-        customer_id: customer_id || 'cust-unknown',
-        driver_id: params.driver_id || null,
+        customer_id: ord?.customer_id || '',
+        customer_name: ord?.customer_name || '',
+        driver_id: params.driver_id,
         vehicle: params.vehicle || 'Van #1',
         delivery_date: deliveryDate,
         delivery_time: params.delivery_time || 'Morning',
         status: 'assigned',
-        empty_cans_returned: 0,
-        payment_collected: 0,
         notes: params.notes || '',
         created_at: nowIso,
       };
+      db.deliveries.unshift(newDelivery);
+      if (ord) ord.order_status = 'dispatched';
+      saveDatabase(db);
 
-      const { error: insErr } = await supabase.from('deliveries').insert(cleanDelRow);
-      if (insErr) {
-        console.error('[API /deliveries/create-for-order] Supabase insert error:', insErr);
-        return res.status(500).json({ message: insErr.message });
-      }
-
-      // Update order status to dispatched
-      await supabase.from('orders').update({ order_status: 'dispatched', updated_at: nowIso }).eq('id', params.order_id);
-
-      return res.status(201).json({ id });
-    }
-
-    // Central DB fallback
-    const db = loadDatabase();
-    const id = `del-${Date.now()}`;
-    const deliveryNumber = `DEL-${Date.now().toString().slice(-6)}`;
-    const ord = db.orders.find(o => o.id === params.order_id);
-    const newDelivery = {
-      id,
-      delivery_number: deliveryNumber,
-      order_id: params.order_id,
-      customer_id: ord?.customer_id || '',
-      driver_id: params.driver_id,
-      vehicle: params.vehicle || 'Van #1',
-      delivery_date: deliveryDate,
-      delivery_time: params.delivery_time || 'Morning',
-      status: 'assigned',
-      notes: params.notes || '',
-      created_at: nowIso,
-    };
-    db.deliveries.unshift(newDelivery);
-    if (ord) ord.order_status = 'dispatched';
-    saveDatabase(db);
-
-    return res.status(201).json({ id });
+      const payload = { id, created: true };
+      if (idempotencyKey) saveIdempotencyRecord(idempotencyKey, 'dispatch_order', payload);
+      return res.status(201).json(payload);
+    });
   } catch (err: any) {
     return res.status(500).json({ message: err.message });
   }
@@ -1627,135 +1898,300 @@ apiRouter.post('/deliveries/:id/complete', async (req: Request, res: Response) =
   try {
     const { id } = req.params;
     const completionData = req.body;
-    const supabase = getServerSupabase();
+    const idempotencyKey = (req.headers['x-idempotency-key'] as string) || (completionData.idempotency_key as string);
+    const lockKey = `complete-delivery-${id}`;
 
-    const emptyCans = Number(completionData.empty_cans_returned || 0);
-    const paymentCollected = Number(completionData.payment_collected || 0);
-    const paymentMethod = completionData.payment_method || 'Cash';
-    const notes = completionData.notes || '';
-    const nowIso = new Date().toISOString();
-    const today = nowIso.split('T')[0];
-
-    if (supabase) {
-      // 1. Get delivery record from Supabase
-      const { data: del, error: delErr } = await supabase
-        .from('deliveries')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
-
-      if (delErr || !del) {
-        return res.status(404).json({ message: 'Delivery record not found in Supabase' });
+    return await runWithLock(lockKey, async () => {
+      // 1. Idempotency Cache Check
+      if (idempotencyKey) {
+        const cached = getIdempotencyRecord(idempotencyKey);
+        if (cached) {
+          console.log(`[IDEMPOTENCY] Returning cached complete response for key: ${idempotencyKey}`);
+          return res.status(200).json(cached);
+        }
       }
 
-      // 2. Update delivery record in Supabase
-      const { error: updErr } = await supabase
-        .from('deliveries')
-        .update({
-          status: 'delivered',
-          empty_cans_returned: emptyCans,
-          payment_collected: paymentCollected,
-          payment_method: paymentMethod,
-          notes: notes || del.notes,
-          completed_at: nowIso,
-          updated_at: nowIso,
-        })
-        .eq('id', id);
+      const supabase = getServerSupabase();
+      const emptyCans = Number(completionData.empty_cans_returned || 0);
+      const paymentCollected = Number(completionData.payment_collected || 0);
+      const paymentMethod = completionData.payment_method || 'Cash';
+      const notes = completionData.notes || '';
+      const nowIso = new Date().toISOString();
+      const today = nowIso.split('T')[0];
 
-      if (updErr) {
-        console.error('[API /deliveries/:id/complete] Supabase delivery update error:', updErr);
-        return res.status(500).json({ message: updErr.message });
-      }
+      if (supabase) {
+        // 2. Fetch delivery record
+        const { data: del, error: delErr } = await supabase
+          .from('deliveries')
+          .select('*, order:orders(*)')
+          .eq('id', id)
+          .maybeSingle();
 
-      // 3. Update order status to completed
-      if (del.order_id) {
-        await supabase.from('orders').update({
-          order_status: 'completed',
-          payment_status: paymentCollected > 0 ? 'paid' : 'pending',
-          updated_at: nowIso,
-        }).eq('id', del.order_id);
-      }
-
-      // 4. Update customer cans & balance in Supabase
-      const { data: cust } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('id', del.customer_id)
-        .maybeSingle();
-
-      if (cust) {
-        const newCans = Math.max(0, (cust.cans_held || 0) - emptyCans);
-        const newBalance = Math.max(0, (cust.outstanding_balance || 0) - paymentCollected);
-
-        await supabase.from('customers').update({
-          cans_held: newCans,
-          outstanding_balance: newBalance,
-          updated_at: nowIso,
-        }).eq('id', cust.id);
-
-        // Record empty can movement in Supabase
-        if (emptyCans > 0) {
-          await supabase.from('customer_can_movements').insert({
-            id: `canmov-${Date.now()}`,
-            customer_id: cust.id,
-            product_id: 'prod-19l-can',
-            movement_type: 'returned',
-            quantity: emptyCans,
-            balance_after: newCans,
-            delivery_id: id,
-            reason: `Returned from Delivery ${del.delivery_number}`,
-            created_at: nowIso,
-          });
+        if (delErr || !del) {
+          return res.status(404).json({ message: 'Delivery record not found in Supabase' });
         }
 
-        // Record payment & ledger in Supabase
-        if (paymentCollected > 0) {
-          await supabase.from('payments').insert({
-            id: `pay-${Date.now()}`,
-            payment_number: `PAY-${Date.now().toString().slice(-6)}`,
-            customer_id: cust.id,
-            order_id: del.order_id,
+        // 3. Strict Status Check - If already delivered, DO NOT process again!
+        if (del.status === 'delivered') {
+          console.log(`[DELIVERY] Delivery ${id} is already completed/delivered. Returning existing state.`);
+          const alreadyResult = {
+            success: true,
+            alreadyCompleted: true,
+            message: 'Delivery is already completed',
             delivery_id: id,
-            amount: paymentCollected,
+            status: 'delivered',
+          };
+          if (idempotencyKey) saveIdempotencyRecord(idempotencyKey, 'complete_delivery', alreadyResult);
+          return res.status(200).json(alreadyResult);
+        }
+
+        // 4. Fetch order items to determine delivered products and quantities
+        let orderItems: any[] = [];
+        if (del.order_id) {
+          const { data: items } = await supabase
+            .from('order_items')
+            .select('*')
+            .eq('order_id', del.order_id);
+          orderItems = items || [];
+        }
+
+        const orderTotal = Number(del.order?.total_amount || 0);
+        // Find delivered reusable 19L cans
+        const delivered19lItem = orderItems.find((it: any) => it.product_id === 'prod-19l-can');
+        const delivered19lCans = delivered19lItem ? Number(delivered19lItem.quantity || 0) : 0;
+
+        // 5. Update delivery record
+        const { error: updErr } = await supabase
+          .from('deliveries')
+          .update({
+            status: 'delivered',
+            empty_cans_returned: emptyCans,
+            payment_collected: paymentCollected,
             payment_method: paymentMethod,
-            payment_date: today,
-            notes,
-            created_at: nowIso,
-          });
+            notes: notes || del.notes,
+            completed_at: nowIso,
+            updated_at: nowIso,
+          })
+          .eq('id', id);
 
-          await supabase.from('customer_ledger').insert({
-            id: `ledg-${Date.now()}`,
-            customer_id: cust.id,
-            transaction_type: 'payment',
-            reference_type: 'delivery',
-            reference_id: id,
-            debit: 0,
-            credit: paymentCollected,
-            balance: newBalance,
-            description: `Payment collection from delivery ${del.delivery_number}`,
-            transaction_date: today,
-            created_at: nowIso,
-          });
+        if (updErr) {
+          console.error('[API /deliveries/:id/complete] Supabase delivery update error:', updErr);
+          return res.status(500).json({ message: updErr.message });
+        }
+
+        // 6. Update order status to completed
+        if (del.order_id) {
+          await supabase.from('orders').update({
+            order_status: 'completed',
+            payment_status: paymentCollected >= orderTotal ? 'paid' : (paymentCollected > 0 ? 'partially_paid' : 'pending'),
+            updated_at: nowIso,
+          }).eq('id', del.order_id);
+        }
+
+        // 7. Update Inventory (Warehouse Stock) Exactly Once
+        for (const item of orderItems) {
+          const { data: currentInv } = await supabase
+            .from('inventory')
+            .select('*')
+            .eq('product_id', item.product_id)
+            .maybeSingle();
+
+          if (currentInv) {
+            const currentFilled = Number(currentInv.filled_stock || 0);
+            const newFilled = Math.max(0, currentFilled - Number(item.quantity || 0));
+            await supabase.from('inventory').update({
+              filled_stock: newFilled,
+              updated_at: nowIso,
+            }).eq('id', currentInv.id);
+
+            await supabase.from('inventory_movements').insert({
+              id: `mov-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              product_id: item.product_id,
+              movement_type: 'delivery',
+              stock_type: 'filled',
+              quantity: Number(item.quantity || 0),
+              previous_stock: currentFilled,
+              new_stock: newFilled,
+              reason: `Delivered on Route ${del.delivery_number}`,
+              reference_type: 'delivery',
+              reference_id: id,
+              created_at: nowIso,
+            });
+          }
+        }
+
+        // For empty cans returned: increment empty_cans in warehouse inventory
+        if (emptyCans > 0) {
+          const { data: canInv } = await supabase
+            .from('inventory')
+            .select('*')
+            .eq('product_id', 'prod-19l-can')
+            .maybeSingle();
+
+          if (canInv) {
+            const currentEmpty = Number(canInv.empty_cans || 0);
+            const newEmpty = currentEmpty + emptyCans;
+            await supabase.from('inventory').update({
+              empty_cans: newEmpty,
+              updated_at: nowIso,
+            }).eq('id', canInv.id);
+
+            await supabase.from('inventory_movements').insert({
+              id: `mov-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              product_id: 'prod-19l-can',
+              movement_type: 'return',
+              stock_type: 'empty',
+              quantity: emptyCans,
+              previous_stock: currentEmpty,
+              new_stock: newEmpty,
+              reason: `Empty cans retrieved on Delivery ${del.delivery_number}`,
+              reference_type: 'delivery',
+              reference_id: id,
+              created_at: nowIso,
+            });
+          }
+        }
+
+        // 8. Update Customer Cans & Financial Balance Exactly Once
+        const { data: cust } = await supabase
+          .from('customers')
+          .select('*')
+          .eq('id', del.customer_id)
+          .maybeSingle();
+
+        if (cust) {
+          const currentCansHeld = Number(cust.cans_held || 0);
+          const newCansHeld = Math.max(0, currentCansHeld + delivered19lCans - emptyCans);
+
+          const currentBal = Number(cust.outstanding_balance || 0);
+          const netFinancialDelta = orderTotal - paymentCollected;
+          const newBalance = Math.max(0, currentBal + netFinancialDelta);
+
+          await supabase.from('customers').update({
+            cans_held: newCansHeld,
+            outstanding_balance: newBalance,
+            updated_at: nowIso,
+          }).eq('id', cust.id);
+
+          if (delivered19lCans > 0) {
+            await supabase.from('customer_can_movements').insert({
+              id: `canmov-${Date.now()}-del`,
+              customer_id: cust.id,
+              product_id: 'prod-19l-can',
+              movement_type: 'issued',
+              quantity: delivered19lCans,
+              balance_after: currentCansHeld + delivered19lCans,
+              delivery_id: id,
+              reason: `Delivered from ${del.delivery_number}`,
+              created_at: nowIso,
+            });
+          }
+
+          if (emptyCans > 0) {
+            await supabase.from('customer_can_movements').insert({
+              id: `canmov-${Date.now()}-ret`,
+              customer_id: cust.id,
+              product_id: 'prod-19l-can',
+              movement_type: 'returned',
+              quantity: emptyCans,
+              balance_after: newCansHeld,
+              delivery_id: id,
+              reason: `Returned from Delivery ${del.delivery_number}`,
+              created_at: nowIso,
+            });
+          }
+
+          if (orderTotal > 0) {
+            await supabase.from('customer_ledger').insert({
+              id: `ledg-${Date.now()}-ord`,
+              customer_id: cust.id,
+              transaction_type: 'invoice',
+              reference_type: 'order',
+              reference_id: del.order_id || id,
+              debit: orderTotal,
+              credit: 0,
+              balance: currentBal + orderTotal,
+              description: `Order delivery #${del.delivery_number}`,
+              transaction_date: today,
+              created_at: nowIso,
+            });
+          }
+
+          if (paymentCollected > 0) {
+            await supabase.from('payments').insert({
+              id: `pay-${Date.now()}`,
+              payment_number: `PAY-${Date.now().toString().slice(-6)}`,
+              customer_id: cust.id,
+              order_id: del.order_id,
+              delivery_id: id,
+              amount: paymentCollected,
+              payment_method: paymentMethod,
+              payment_date: today,
+              notes,
+              created_at: nowIso,
+            });
+
+            await supabase.from('customer_ledger').insert({
+              id: `ledg-${Date.now()}-pay`,
+              customer_id: cust.id,
+              transaction_type: 'payment',
+              reference_type: 'delivery',
+              reference_id: id,
+              debit: 0,
+              credit: paymentCollected,
+              balance: newBalance,
+              description: `Payment collection from delivery ${del.delivery_number}`,
+              transaction_date: today,
+              created_at: nowIso,
+            });
+          }
+        }
+
+        console.log(`[DELIVERY COMPLETED] #${del.delivery_number} atomically processed in Supabase`);
+      }
+
+      // Synchronize central local DB
+      const db = loadDatabase();
+      const localDel = db.deliveries.find(d => d.id === id);
+      if (localDel) {
+        localDel.status = 'delivered';
+        localDel.empty_cans_returned = emptyCans;
+        localDel.payment_collected = paymentCollected;
+        localDel.payment_method = paymentMethod;
+        localDel.completed_at = nowIso;
+      }
+
+      const localOrd = localDel ? db.orders.find(o => o.id === localDel.order_id) : null;
+      if (localOrd) {
+        localOrd.order_status = 'completed';
+        localOrd.payment_status = paymentCollected >= Number(localOrd.total_amount || 0) ? 'paid' : 'pending';
+      }
+
+      if (localDel && localDel.customer_id) {
+        const localCust = db.customers.find(c => c.id === localDel.customer_id);
+        if (localCust) {
+          const ordTot = Number(localOrd?.total_amount || localDel.total_amount || 0);
+          localCust.cans_held = Math.max(0, (localCust.cans_held || 0) - emptyCans);
+          localCust.outstanding_balance = Math.max(0, (localCust.outstanding_balance || 0) + (ordTot - paymentCollected));
         }
       }
 
-      console.log(`[DELIVERY COMPLETED] #${del.delivery_number} successfully recorded in Supabase`);
-    }
+      const inv19 = db.inventory.find(i => i.product_id === 'prod-19l-can');
+      if (inv19 && emptyCans > 0) {
+        inv19.empty_cans = (inv19.empty_cans || 0) + emptyCans;
+      }
 
-    // Keep central DB aligned
-    const db = loadDatabase();
-    const localDel = db.deliveries.find(d => d.id === id);
-    if (localDel) {
-      localDel.status = 'delivered';
-      localDel.empty_cans_returned = emptyCans;
-      localDel.payment_collected = paymentCollected;
-      localDel.payment_method = paymentMethod;
-      localDel.completed_at = nowIso;
       saveDatabase(db);
-    }
 
-    return res.json({ success: true });
+      const resultPayload = { success: true, delivery_id: id, status: 'delivered' };
+      if (idempotencyKey) {
+        saveIdempotencyRecord(idempotencyKey, 'complete_delivery', resultPayload);
+      }
+
+      return res.json(resultPayload);
+    });
   } catch (err: any) {
+    console.error('[API /deliveries/:id/complete] Exception:', err);
     return res.status(500).json({ message: err.message });
   }
 });
@@ -1767,37 +2203,50 @@ apiRouter.put('/deliveries/:id/status', async (req: Request, res: Response) => {
     const supabase = getServerSupabase();
     const nowIso = new Date().toISOString();
 
-    if (supabase) {
-      const updateData: any = {
-        status,
-        updated_at: nowIso,
-      };
-      if (failure_reason !== undefined) updateData.failure_reason = failure_reason;
+    const lockKey = `status-delivery-${id}`;
+    return await runWithLock(lockKey, async () => {
+      if (supabase) {
+        const { data: existing } = await supabase.from('deliveries').select('status, order_id').eq('id', id).maybeSingle();
+        if (existing) {
+          if (existing.status === 'delivered') {
+            // Cannot revert from delivered
+            return res.json({ success: true, unchanged: true, status: 'delivered' });
+          }
+          if (existing.status === status) {
+            return res.json({ success: true, unchanged: true, status });
+          }
+        }
 
-      const { error } = await supabase.from('deliveries').update(updateData).eq('id', id);
-      if (error) {
-        console.error('[API /deliveries/:id/status] Supabase error:', error.message);
-        return res.status(500).json({ message: error.message });
-      }
+        const updateData: any = {
+          status,
+          updated_at: nowIso,
+        };
+        if (failure_reason !== undefined) updateData.failure_reason = failure_reason;
 
-      // If status is delivered, update order status to completed
-      if (status === 'delivered') {
-        const { data: delRow } = await supabase.from('deliveries').select('order_id').eq('id', id).maybeSingle();
-        if (delRow?.order_id) {
-          await supabase.from('orders').update({ order_status: 'completed', updated_at: nowIso }).eq('id', delRow.order_id);
+        const { error } = await supabase.from('deliveries').update(updateData).eq('id', id);
+        if (error) {
+          console.error('[API /deliveries/:id/status] Supabase error:', error.message);
+          return res.status(500).json({ message: error.message });
+        }
+
+        if (status === 'delivered' && existing?.order_id) {
+          await supabase.from('orders').update({ order_status: 'completed', updated_at: nowIso }).eq('id', existing.order_id);
         }
       }
-    }
 
-    const db = loadDatabase();
-    const del = db.deliveries.find(d => d.id === id);
-    if (del) {
-      del.status = status;
-      if (failure_reason) del.failure_reason = failure_reason;
-      saveDatabase(db);
-    }
+      const db = loadDatabase();
+      const del = db.deliveries.find(d => d.id === id);
+      if (del) {
+        if (del.status === 'delivered') {
+          return res.json({ success: true, unchanged: true, status: 'delivered' });
+        }
+        del.status = status;
+        if (failure_reason) del.failure_reason = failure_reason;
+        saveDatabase(db);
+      }
 
-    return res.json({ success: true });
+      return res.json({ success: true });
+    });
   } catch (err: any) {
     return res.status(500).json({ message: err.message });
   }
@@ -1874,6 +2323,9 @@ apiRouter.post('/cans/adjust-customer', async (req: Request, res: Response) => {
 // -----------------------------------------------------------------------------
 
 apiRouter.get('/payments', async (req: Request, res: Response) => {
+  const authorized = await authorizePermission(req, res, 'payments', 'can_view');
+  if (!authorized) return;
+
   const supabase = getServerSupabase();
   if (supabase) {
     try {
@@ -1901,6 +2353,9 @@ apiRouter.get('/payments', async (req: Request, res: Response) => {
 
 apiRouter.post('/payments', async (req: Request, res: Response) => {
   try {
+    const authorized = await authorizePermission(req, res, 'payments', 'can_create');
+    if (!authorized) return;
+
     const pay = req.body;
     const db = loadDatabase();
     const id = `pay-${Date.now()}`;
@@ -1994,18 +2449,25 @@ apiRouter.post('/payments', async (req: Request, res: Response) => {
 // 12. EXPENSES
 // -----------------------------------------------------------------------------
 
-apiRouter.get('/expenses/categories', (req: Request, res: Response) => {
+apiRouter.get('/expenses/categories', async (req: Request, res: Response) => {
+  const authorized = await authorizePermission(req, res, 'expenses', 'can_view');
+  if (!authorized) return;
   const db = loadDatabase();
   return res.json(db.expense_categories);
 });
 
-apiRouter.get('/expenses', (req: Request, res: Response) => {
+apiRouter.get('/expenses', async (req: Request, res: Response) => {
+  const authorized = await authorizePermission(req, res, 'expenses', 'can_view');
+  if (!authorized) return;
   const db = loadDatabase();
   return res.json(db.expenses);
 });
 
 apiRouter.post('/expenses', async (req: Request, res: Response) => {
   try {
+    const authorized = await authorizePermission(req, res, 'expenses', 'can_create');
+    if (!authorized) return;
+
     const exp = req.body;
     const db = loadDatabase();
     const id = `exp-${Date.now()}`;
@@ -2035,7 +2497,10 @@ apiRouter.post('/expenses', async (req: Request, res: Response) => {
 // 14. REPORTS & DASHBOARD
 // -----------------------------------------------------------------------------
 
-apiRouter.get('/reports/financial', (req: Request, res: Response) => {
+apiRouter.get('/reports/financial', async (req: Request, res: Response) => {
+  const authorized = await authorizePermission(req, res, 'reports', 'can_view');
+  if (!authorized) return;
+
   const db = loadDatabase();
   const totalRevenue = db.payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
   const totalExpenses = db.expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
@@ -2049,7 +2514,10 @@ apiRouter.get('/reports/financial', (req: Request, res: Response) => {
   });
 });
 
-apiRouter.get('/reports/sales', (req: Request, res: Response) => {
+apiRouter.get('/reports/sales', async (req: Request, res: Response) => {
+  const authorized = await authorizePermission(req, res, 'reports', 'can_view');
+  if (!authorized) return;
+
   const db = loadDatabase();
   const monthMap = new Map<string, { total: number; count: number }>();
   const productMap = new Map<string, { name: string; quantity: number; revenue: number }>();
@@ -2294,17 +2762,23 @@ apiRouter.get('/dashboard/summary', async (req: Request, res: Response) => {
   });
 });
 
-apiRouter.get('/audit-logs', (req: Request, res: Response) => {
+apiRouter.get('/audit-logs', async (req: Request, res: Response) => {
+  const authorized = await authorizePermission(req, res, 'audit', 'can_view');
+  if (!authorized) return;
   const db = loadDatabase();
   return res.json(db.audit_logs);
 });
 
-apiRouter.get('/settings', (req: Request, res: Response) => {
+apiRouter.get('/settings', async (req: Request, res: Response) => {
+  const authorized = await authorizePermission(req, res, 'settings', 'can_view');
+  if (!authorized) return;
   const db = loadDatabase();
   return res.json(db.settings);
 });
 
-apiRouter.put('/settings', (req: Request, res: Response) => {
+apiRouter.put('/settings', async (req: Request, res: Response) => {
+  const authorized = await authorizePermission(req, res, 'settings', 'can_edit');
+  if (!authorized) return;
   const db = loadDatabase();
   db.settings = { ...db.settings, ...req.body };
   saveDatabase(db);

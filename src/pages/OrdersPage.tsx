@@ -33,6 +33,7 @@ import {
   MapPin,
   Phone,
   Sparkles,
+  Loader2,
 } from 'lucide-react';
 
 export const OrdersPage: React.FC = () => {
@@ -54,6 +55,10 @@ export const OrdersPage: React.FC = () => {
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [orderDetails, setOrderDetails] = useState<any | null>(null);
+
+  // Rapid Submission / Double Click Protection states
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+  const [isDispatching, setIsDispatching] = useState(false);
 
   // New Order Form state
   const [orderCustomer, setOrderCustomer] = useState<Customer | null>(null);
@@ -319,8 +324,14 @@ export const OrdersPage: React.FC = () => {
       }
     }
 
+    if (isSubmittingOrder) return;
+    setIsSubmittingOrder(true);
+
+    const idempotencyKey = `ord-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
     try {
       const res = await api.post<{ id: string; orderNumber: string }>('/orders', {
+        idempotency_key: idempotencyKey,
         customer_id: orderCustomer.id,
         customer: orderCustomer,
         customer_name: orderCustomer.name.replace(' (Temp)', ''),
@@ -331,6 +342,8 @@ export const OrdersPage: React.FC = () => {
         delivery_date: deliveryDate,
         payment_type: paymentType,
         notes,
+      }, {
+        'x-idempotency-key': idempotencyKey,
       });
 
       toast.success(`Order #${res.orderNumber} placed and confirmed!`);
@@ -338,6 +351,8 @@ export const OrdersPage: React.FC = () => {
       fetchData();
     } catch (err: any) {
       toast.error(err.message || 'Failed to place order');
+    } finally {
+      setIsSubmittingOrder(false);
     }
   };
 
@@ -364,13 +379,20 @@ export const OrdersPage: React.FC = () => {
 
   const handleDispatch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedOrder) return;
+    if (!selectedOrder || isDispatching) return;
+    setIsDispatching(true);
+
+    const idempotencyKey = `disp-${selectedOrder.id}-${Date.now()}`;
+
     try {
       await api.post('/deliveries/create-for-order', {
+        idempotency_key: idempotencyKey,
         order_id: selectedOrder.id,
         driver_id: dispatchForm.driver_id,
         vehicle: dispatchForm.vehicle,
         delivery_time: dispatchForm.delivery_time,
+      }, {
+        'x-idempotency-key': idempotencyKey,
       });
       toast.success(`Delivery route created and assigned for Order #${selectedOrder.order_number}`);
       setIsDispatchModalOpen(false);
@@ -378,6 +400,8 @@ export const OrdersPage: React.FC = () => {
       fetchData();
     } catch (err: any) {
       toast.error(err.message || 'Failed to assign delivery');
+    } finally {
+      setIsDispatching(false);
     }
   };
 
@@ -1167,16 +1191,19 @@ export const OrdersPage: React.FC = () => {
           <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
             <button
               type="button"
+              disabled={isSubmittingOrder}
               onClick={() => setIsAddModalOpen(false)}
-              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg cursor-pointer"
+              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg cursor-pointer disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 rounded-lg cursor-pointer shadow-xs"
+              disabled={isSubmittingOrder}
+              className="px-4 py-2 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg cursor-pointer shadow-xs flex items-center gap-2"
             >
-              Confirm Order
+              {isSubmittingOrder && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>{isSubmittingOrder ? 'Confirming Order...' : 'Confirm Order'}</span>
             </button>
           </div>
         </form>
@@ -1321,16 +1348,19 @@ export const OrdersPage: React.FC = () => {
           <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
             <button
               type="button"
+              disabled={isDispatching}
               onClick={() => setIsDispatchModalOpen(false)}
-              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg cursor-pointer"
+              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg cursor-pointer disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-semibold text-white bg-sky-600 rounded-lg cursor-pointer"
+              disabled={isDispatching}
+              className="px-4 py-2 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg cursor-pointer flex items-center gap-2"
             >
-              Confirm Dispatch
+              {isDispatching && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>{isDispatching ? 'Dispatching...' : 'Confirm Dispatch'}</span>
             </button>
           </div>
         </form>

@@ -20,6 +20,7 @@ import {
   Search,
   Filter,
   Check,
+  Loader2,
 } from 'lucide-react';
 
 export const DeliveriesPage: React.FC = () => {
@@ -52,6 +53,10 @@ export const DeliveriesPage: React.FC = () => {
     status: 'out_for_delivery',
     failure_reason: '',
   });
+
+  // Rapid Submission / Concurrency Lock states
+  const [isCompletingDelivery, setIsCompletingDelivery] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   const fetchDeliveries = async () => {
     setLoading(true);
@@ -92,14 +97,20 @@ export const DeliveriesPage: React.FC = () => {
 
   const handleCompleteDelivery = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedDelivery) return;
+    if (!selectedDelivery || isCompletingDelivery) return;
+    setIsCompletingDelivery(true);
+
+    const idempotencyKey = `comp-${selectedDelivery.id}-${Date.now()}`;
 
     try {
       await api.post(`/deliveries/${selectedDelivery.id}/complete`, {
+        idempotency_key: idempotencyKey,
         empty_cans_returned: Number(completeForm.empty_cans_returned),
         payment_collected: Number(completeForm.payment_collected),
         payment_method: completeForm.payment_method,
         notes: completeForm.notes,
+      }, {
+        'x-idempotency-key': idempotencyKey,
       });
 
       toast.success(
@@ -109,12 +120,15 @@ export const DeliveriesPage: React.FC = () => {
       fetchDeliveries();
     } catch (err: any) {
       toast.error(err.message || 'Failed to complete delivery');
+    } finally {
+      setIsCompletingDelivery(false);
     }
   };
 
   const handleUpdateStatus = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedDelivery) return;
+    if (!selectedDelivery || isUpdatingStatus) return;
+    setIsUpdatingStatus(true);
 
     try {
       await api.put(`/deliveries/${selectedDelivery.id}/status`, statusForm);
@@ -123,16 +137,22 @@ export const DeliveriesPage: React.FC = () => {
       fetchDeliveries();
     } catch (err: any) {
       toast.error(err.message || 'Failed to update status');
+    } finally {
+      setIsUpdatingStatus(false);
     }
   };
 
   const markOutForDelivery = async (del: Delivery) => {
+    if (isUpdatingStatus || del.status === 'delivered') return;
+    setIsUpdatingStatus(true);
     try {
       await api.put(`/deliveries/${del.id}/status`, { status: 'out_for_delivery' });
       toast.success(`Delivery ${del.delivery_number} is now OUT FOR DELIVERY`);
       fetchDeliveries();
     } catch (err: any) {
       toast.error(err.message || 'Failed to update status');
+    } finally {
+      setIsUpdatingStatus(false);
     }
   };
 
@@ -324,22 +344,25 @@ export const DeliveriesPage: React.FC = () => {
                     <div className="flex items-center gap-2">
                       {del.status === 'assigned' && (
                         <button
+                          disabled={isUpdatingStatus || isCompletingDelivery}
                           onClick={() => markOutForDelivery(del)}
-                          className="px-3 py-1.5 text-xs font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg transition-colors cursor-pointer"
+                          className="px-3 py-1.5 text-xs font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 disabled:opacity-50 border border-sky-200 rounded-lg transition-colors cursor-pointer"
                         >
                           Mark On Route
                         </button>
                       )}
 
                       <button
+                        disabled={isCompletingDelivery}
                         onClick={() => openCompleteModal(del)}
-                        className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-xs transition-colors cursor-pointer"
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-xs transition-colors cursor-pointer"
                       >
                         <Check className="w-3.5 h-3.5" />
                         <span>Complete Delivery</span>
                       </button>
 
                       <button
+                        disabled={isCompletingDelivery}
                         onClick={() => {
                           setSelectedDelivery(del);
                           setStatusForm({
@@ -348,7 +371,7 @@ export const DeliveriesPage: React.FC = () => {
                           });
                           setIsStatusModalOpen(true);
                         }}
-                        className="px-2 py-1.5 text-xs text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                        className="px-2 py-1.5 text-xs text-slate-500 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-50 rounded-lg transition-colors cursor-pointer"
                         title="Update Status / Issue"
                       >
                         ···
@@ -483,16 +506,19 @@ export const DeliveriesPage: React.FC = () => {
             <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
               <button
                 type="button"
+                disabled={isCompletingDelivery}
                 onClick={() => setIsCompleteModalOpen(false)}
-                className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg"
+                className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-sm cursor-pointer"
+                disabled={isCompletingDelivery}
+                className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm cursor-pointer flex items-center gap-2"
               >
-                Confirm Delivery Completion
+                {isCompletingDelivery && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{isCompletingDelivery ? 'Completing Delivery...' : 'Confirm Delivery Completion'}</span>
               </button>
             </div>
           </form>

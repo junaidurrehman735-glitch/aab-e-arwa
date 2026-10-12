@@ -106,6 +106,7 @@ interface DatabaseSchema {
   supplier_transactions: SupplierTransaction[];
   audit_logs: AuditLog[];
   settings: Record<string, string>;
+  idempotency_records?: Record<string, { key: string; action: string; response: any; created_at: string }>;
 }
 
 function getDefaultDatabase(): DatabaseSchema {
@@ -137,6 +138,7 @@ function getDefaultDatabase(): DatabaseSchema {
       currency: 'PKR',
       can_security_deposit: '1200',
     },
+    idempotency_records: {},
   };
 }
 
@@ -192,12 +194,19 @@ export function getRolePermissions(roleId: string): Permission[] {
     'staff', 'reports', 'audit', 'settings'
   ];
 
+  const db = loadDatabase();
+  const storedForRole = (db.permissions || []).filter((p: any) => p.role_id === roleId);
+
+  // Default module-by-module baseline
+  const defaults: Record<string, Permission> = {};
   if (roleId === 'role-owner') {
-    return modules.map(m => ({ module: m, can_view: 1, can_create: 1, can_edit: 1, can_approve: 1, can_delete: 1 }));
+    modules.forEach(m => {
+      defaults[m] = { module: m, can_view: 1, can_create: 1, can_edit: 1, can_approve: 1, can_delete: 1 };
+    });
   } else if (roleId === 'role-manager') {
-    return modules.map(m => {
+    modules.forEach(m => {
       const isFinancialOrAdmin = ['payments', 'expenses', 'staff', 'settings'].includes(m);
-      return {
+      defaults[m] = {
         module: m,
         can_view: isFinancialOrAdmin ? 0 : 1,
         can_create: isFinancialOrAdmin ? 0 : 1,
@@ -208,13 +217,101 @@ export function getRolePermissions(roleId: string): Permission[] {
     });
   } else {
     // Delivery Boy
-    return modules.map(m => ({
-      module: m,
-      can_view: ['dashboard', 'deliveries', 'cans', 'customers'].includes(m) ? 1 : 0,
-      can_create: m === 'deliveries' || m === 'cans' ? 1 : 0,
-      can_edit: m === 'deliveries' || m === 'cans' ? 1 : 0,
-      can_approve: 0,
-      can_delete: 0,
-    }));
+    modules.forEach(m => {
+      defaults[m] = {
+        module: m,
+        can_view: ['dashboard', 'deliveries', 'cans', 'customers'].includes(m) ? 1 : 0,
+        can_create: m === 'deliveries' || m === 'cans' ? 1 : 0,
+        can_edit: m === 'deliveries' || m === 'cans' ? 1 : 0,
+        can_approve: 0,
+        can_delete: 0,
+      };
+    });
   }
+
+  // Merge stored customized permissions on top of default baseline
+  return modules.map(m => {
+    const found = storedForRole.find((p: any) => p.module === m);
+    if (found) {
+      return {
+        module: m,
+        can_view: Number(found.can_view ?? 0),
+        can_create: Number(found.can_create ?? 0),
+        can_edit: Number(found.can_edit ?? 0),
+        can_approve: Number(found.can_approve ?? 0),
+        can_delete: Number(found.can_delete ?? 0),
+      };
+    }
+    return defaults[m] || { module: m, can_view: 0, can_create: 0, can_edit: 0, can_approve: 0, can_delete: 0 };
+  });
 }
+
+export function saveRolePermissions(roleId: string, perms: Permission[]) {
+  const db = loadDatabase();
+  if (!db.permissions) {
+    db.permissions = [];
+  }
+
+  // Remove existing permissions for this role
+  db.permissions = db.permissions.filter((p: any) => p.role_id !== roleId);
+
+  // Insert updated permissions
+  perms.forEach((p) => {
+    db.permissions.push({
+      role_id: roleId,
+      module: p.module,
+      can_view: Number(p.can_view ?? 0),
+      can_create: Number(p.can_create ?? 0),
+      can_edit: Number(p.can_edit ?? 0),
+      can_approve: Number(p.can_approve ?? 0),
+      can_delete: Number(p.can_delete ?? 0),
+    } as any);
+  });
+
+  saveDatabase(db);
+}
+
+export function getIdempotencyRecord(key: string): any | null {
+  if (!key) return null;
+  const db = loadDatabase();
+  const rec = db.idempotency_records?.[key];
+  return rec ? rec.response : null;
+}
+
+export function saveIdempotencyRecord(key: string, action: string, response: any) {
+  if (!key) return;
+  const db = loadDatabase();
+  if (!db.idempotency_records) {
+    db.idempotency_records = {};
+  }
+  db.idempotency_records[key] = {
+    key,
+    action,
+    response,
+    created_at: new Date().toISOString(),
+  };
+  saveDatabase(db);
+}
+
+const inFlightLocks = new Map<string, Promise<any>>();
+
+export async function runWithLock<T>(lockKey: string, fn: () => Promise<T>): Promise<T> {
+  while (inFlightLocks.has(lockKey)) {
+    try {
+      await inFlightLocks.get(lockKey);
+    } catch (_) {}
+  }
+  const promise = (async () => {
+    try {
+      return await fn();
+    } finally {
+      inFlightLocks.delete(lockKey);
+    }
+  })();
+  inFlightLocks.set(lockKey, promise);
+  return promise;
+}
+
+
+
+

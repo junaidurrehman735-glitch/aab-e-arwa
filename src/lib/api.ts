@@ -284,14 +284,19 @@ async function handleSupabaseRoute<T>(method: string, endpoint: string, body?: a
 // Production Single Source of Truth API Client (Cross-Device Synchronized)
 // -----------------------------------------------------------------------------
 
-async function requestServer<T>(method: string, endpoint: string, body?: any): Promise<T> {
+async function requestServer<T>(method: string, endpoint: string, body?: any, customHeaders?: Record<string, string>): Promise<T> {
   const token = getAuthToken();
   const cleanPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = cleanPath.startsWith('/api') ? cleanPath : `/api${cleanPath}`;
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    ...(customHeaders || {}),
   };
+
+  if (body && typeof body === 'object' && body.idempotency_key && !headers['x-idempotency-key']) {
+    headers['x-idempotency-key'] = String(body.idempotency_key);
+  }
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -335,16 +340,16 @@ async function requestServer<T>(method: string, endpoint: string, body?: any): P
 }
 
 export const api = {
-  get: async <T>(endpoint: string): Promise<T> => {
-    return requestServer<T>('GET', endpoint);
+  get: async <T>(endpoint: string, headers?: Record<string, string>): Promise<T> => {
+    return requestServer<T>('GET', endpoint, undefined, headers);
   },
-  post: async <T>(endpoint: string, body?: any): Promise<T> => {
-    return requestServer<T>('POST', endpoint, body);
+  post: async <T>(endpoint: string, body?: any, headers?: Record<string, string>): Promise<T> => {
+    return requestServer<T>('POST', endpoint, body, headers);
   },
-  put: async <T>(endpoint: string, body?: any): Promise<T> => {
-    return requestServer<T>('PUT', endpoint, body);
+  put: async <T>(endpoint: string, body?: any, headers?: Record<string, string>): Promise<T> => {
+    return requestServer<T>('PUT', endpoint, body, headers);
   },
-  delete: async <T>(endpoint: string): Promise<T> => {
-    return requestServer<T>('DELETE', endpoint);
+  delete: async <T>(endpoint: string, headers?: Record<string, string>): Promise<T> => {
+    return requestServer<T>('DELETE', endpoint, undefined, headers);
   },
 };

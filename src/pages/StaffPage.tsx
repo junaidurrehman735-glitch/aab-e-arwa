@@ -8,7 +8,7 @@ import { Badge } from '../components/ui/Badge.tsx';
 import { Shield, Plus, Edit2, Lock, Check, UserCheck, ShieldAlert } from 'lucide-react';
 
 export const StaffPage: React.FC = () => {
-  const { hasPermission, user: currentUser } = useAuth();
+  const { hasPermission, user: currentUser, refreshUser } = useAuth();
   const toast = useToast();
 
   const [staffList, setStaffList] = useState<User[]>([]);
@@ -142,6 +142,8 @@ export const StaffPage: React.FC = () => {
         permissions: rolePermissions,
       });
       toast.success('Role permissions matrix saved successfully');
+      // Refresh current user and permissions if active user role matches or is Owner
+      await refreshUser();
     } catch (err: any) {
       toast.error(err.message || 'Failed to save permissions');
     }
@@ -307,7 +309,7 @@ export const StaffPage: React.FC = () => {
                           <input
                             type="checkbox"
                             checked={p[action] === 1}
-                            disabled={selectedRole === 'role-owner'} // Owner always full
+                            disabled={selectedRole === 'role-owner' && p.module === 'staff' && (action === 'can_view' || action === 'can_edit')} // Prevent Owner from locking out of Staff & Permissions management
                             onChange={() => togglePermission(p.module, action)}
                             className="w-4 h-4 rounded text-sky-600 focus:ring-sky-500 border-slate-300 disabled:opacity-50 cursor-pointer"
                           />

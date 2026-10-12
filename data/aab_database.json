@@ -66,7 +66,260 @@
       "is_system": true
     }
   ],
-  "permissions": [],
+  "permissions": [
+    {
+      "role_id": "role-owner",
+      "module": "dashboard",
+      "can_view": 1,
+      "can_create": 1,
+      "can_edit": 1,
+      "can_approve": 1,
+      "can_delete": 1
+    },
+    {
+      "role_id": "role-owner",
+      "module": "customers",
+      "can_view": 1,
+      "can_create": 1,
+      "can_edit": 1,
+      "can_approve": 1,
+      "can_delete": 1
+    },
+    {
+      "role_id": "role-owner",
+      "module": "products",
+      "can_view": 1,
+      "can_create": 1,
+      "can_edit": 1,
+      "can_approve": 1,
+      "can_delete": 1
+    },
+    {
+      "role_id": "role-owner",
+      "module": "inventory",
+      "can_view": 1,
+      "can_create": 1,
+      "can_edit": 1,
+      "can_approve": 1,
+      "can_delete": 1
+    },
+    {
+      "role_id": "role-owner",
+      "module": "production",
+      "can_view": 1,
+      "can_create": 1,
+      "can_edit": 1,
+      "can_approve": 1,
+      "can_delete": 1
+    },
+    {
+      "role_id": "role-owner",
+      "module": "orders",
+      "can_view": 1,
+      "can_create": 1,
+      "can_edit": 1,
+      "can_approve": 1,
+      "can_delete": 1
+    },
+    {
+      "role_id": "role-owner",
+      "module": "deliveries",
+      "can_view": 1,
+      "can_create": 1,
+      "can_edit": 1,
+      "can_approve": 1,
+      "can_delete": 1
+    },
+    {
+      "role_id": "role-owner",
+      "module": "cans",
+      "can_view": 1,
+      "can_create": 1,
+      "can_edit": 1,
+      "can_approve": 1,
+      "can_delete": 1
+    },
+    {
+      "role_id": "role-owner",
+      "module": "payments",
+      "can_view": 1,
+      "can_create": 1,
+      "can_edit": 1,
+      "can_approve": 1,
+      "can_delete": 1
+    },
+    {
+      "role_id": "role-owner",
+      "module": "expenses",
+      "can_view": 1,
+      "can_create": 1,
+      "can_edit": 1,
+      "can_approve": 1,
+      "can_delete": 1
+    },
+    {
+      "role_id": "role-owner",
+      "module": "staff",
+      "can_view": 1,
+      "can_create": 1,
+      "can_edit": 1,
+      "can_approve": 1,
+      "can_delete": 1
+    },
+    {
+      "role_id": "role-owner",
+      "module": "reports",
+      "can_view": 1,
+      "can_create": 1,
+      "can_edit": 1,
+      "can_approve": 1,
+      "can_delete": 1
+    },
+    {
+      "role_id": "role-owner",
+      "module": "audit",
+      "can_view": 1,
+      "can_create": 1,
+      "can_edit": 1,
+      "can_approve": 1,
+      "can_delete": 1
+    },
+    {
+      "role_id": "role-owner",
+      "module": "settings",
+      "can_view": 1,
+      "can_create": 1,
+      "can_edit": 1,
+      "can_approve": 1,
+      "can_delete": 1
+    },
+    {
+      "role_id": "role-delivery",
+      "module": "dashboard",
+      "can_view": 0,
+      "can_create": 0,
+      "can_edit": 0,
+      "can_approve": 0,
+      "can_delete": 0
+    },
+    {
+      "role_id": "role-delivery",
+      "module": "customers",
+      "can_view": 1,
+      "can_create": 0,
+      "can_edit": 0,
+      "can_approve": 0,
+      "can_delete": 0
+    },
+    {
+      "role_id": "role-delivery",
+      "module": "products",
+      "can_view": 0,
+      "can_create": 0,
+      "can_edit": 0,
+      "can_approve": 0,
+      "can_delete": 0
+    },
+    {
+      "role_id": "role-delivery",
+      "module": "inventory",
+      "can_view": 0,
+      "can_create": 0,
+      "can_edit": 0,
+      "can_approve": 0,
+      "can_delete": 0
+    },
+    {
+      "role_id": "role-delivery",
+      "module": "production",
+      "can_view": 0,
+      "can_create": 0,
+      "can_edit": 0,
+      "can_approve": 0,
+      "can_delete": 0
+    },
+    {
+      "role_id": "role-delivery",
+      "module": "orders",
+      "can_view": 0,
+      "can_create": 0,
+      "can_edit": 0,
+      "can_approve": 0,
+      "can_delete": 0
+    },
+    {
+      "role_id": "role-delivery",
+      "module": "deliveries",
+      "can_view": 1,
+      "can_create": 1,
+      "can_edit": 1,
+      "can_approve": 0,
+      "can_delete": 0
+    },
+    {
+      "role_id": "role-delivery",
+      "module": "cans",
+      "can_view": 1,
+      "can_create": 1,
+      "can_edit": 1,
+      "can_approve": 0,
+      "can_delete": 0
+    },
+    {
+      "role_id": "role-delivery",
+      "module": "payments",
+      "can_view": 0,
+      "can_create": 0,
+      "can_edit": 0,
+      "can_approve": 0,
+      "can_delete": 0
+    },
+    {
+      "role_id": "role-delivery",
+      "module": "expenses",
+      "can_view": 0,
+      "can_create": 0,
+      "can_edit": 0,
+      "can_approve": 0,
+      "can_delete": 0
+    },
+    {
+      "role_id": "role-delivery",
+      "module": "staff",
+      "can_view": 0,
+      "can_create": 0,
+      "can_edit": 0,
+      "can_approve": 0,
+      "can_delete": 0
+    },
+    {
+      "role_id": "role-delivery",
+      "module": "reports",
+      "can_view": 0,
+      "can_create": 0,
+      "can_edit": 0,
+      "can_approve": 0,
+      "can_delete": 0
+    },
+    {
+      "role_id": "role-delivery",
+      "module": "audit",
+      "can_view": 0,
+      "can_create": 0,
+      "can_edit": 0,
+      "can_approve": 0,
+      "can_delete": 0
+    },
+    {
+      "role_id": "role-delivery",
+      "module": "settings",
+      "can_view": 0,
+      "can_create": 0,
+      "can_edit": 0,
+      "can_approve": 0,
+      "can_delete": 0
+    }
+  ],
   "customer_types": [
     {
       "id": "ct-home",
@@ -115,13 +368,13 @@
       "cash_status": "Cash on Delivery",
       "credit_limit": 0,
       "outstanding_balance": 0,
-      "cans_held": 1,
+      "cans_held": 2,
       "net_deposit_amount": 0,
       "notes": "",
       "delivery_instructions": "",
       "status": "active",
       "created_at": "2026-10-12T07:32:24.048+00:00",
-      "updated_at": "2026-10-12T07:32:59.232+00:00"
+      "updated_at": "2026-10-12T15:11:33.507+00:00"
     },
     {
       "id": "cust-1791789996338",
@@ -380,7 +633,7 @@
       "id": "inv-1791756072022",
       "product_id": "prod-19l-can",
       "filled_stock": 400,
-      "empty_cans": 0,
+      "empty_cans": 1,
       "damaged_cans": 0,
       "lost_cans": 0,
       "updated_at": "2026-10-11T22:01:11.343Z"
@@ -407,6 +660,314 @@
   ],
   "production_records": [],
   "orders": [
+    {
+      "id": "ord-1791817891611",
+      "order_number": "ORD-891611",
+      "customer_id": "cust-1791790344048",
+      "total_amount": 440,
+      "payment_type": "Cash",
+      "payment_status": "paid",
+      "order_status": "completed",
+      "delivery_date": "2026-10-12",
+      "delivery_address": "nawa killi zarghoon abad",
+      "notes": "Automated test order",
+      "created_by": "Owner",
+      "created_at": "2026-10-12T15:11:31.611+00:00",
+      "updated_at": "2026-10-12T15:11:33.507+00:00",
+      "customer": {
+        "id": "cust-1791790344048",
+        "area": "Nawa Killi Bypass",
+        "name": "hikmat khan",
+        "phone": "03106854344",
+        "address": "nawa killi zarghoon abad"
+      },
+      "items": [
+        {
+          "id": "item-1791817891766-bftyi",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791817891611",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 220,
+          "total_price": 440,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "hikmat khan",
+      "customer_phone": "03106854344",
+      "customer_area": "Nawa Killi Bypass"
+    },
+    {
+      "id": "ord-1791800846299",
+      "order_number": "ORD-846299",
+      "customer_id": "cust-1791790344048",
+      "total_amount": 200,
+      "payment_type": "Cash",
+      "payment_status": "paid",
+      "order_status": "completed",
+      "delivery_date": "2026-10-12",
+      "delivery_address": "nawa killi zarghoon abad",
+      "notes": "",
+      "created_by": "Owner",
+      "created_at": "2026-10-12T10:27:26.299+00:00",
+      "updated_at": "2026-10-12T14:03:06.569+00:00",
+      "customer": {
+        "id": "cust-1791790344048",
+        "area": "Nawa Killi Bypass",
+        "name": "hikmat khan",
+        "phone": "03106854344",
+        "address": "nawa killi zarghoon abad"
+      },
+      "items": [
+        {
+          "id": "item-1791800847601-wkqpx",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791800846299",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 100,
+          "total_price": 200,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "hikmat khan",
+      "customer_phone": "03106854344",
+      "customer_area": "Nawa Killi Bypass"
+    },
+    {
+      "id": "ord-1791800846229",
+      "order_number": "ORD-846229",
+      "customer_id": "cust-1791790344048",
+      "total_amount": 200,
+      "payment_type": "Cash",
+      "payment_status": "paid",
+      "order_status": "completed",
+      "delivery_date": "2026-10-12",
+      "delivery_address": "nawa killi zarghoon abad",
+      "notes": "",
+      "created_by": "Owner",
+      "created_at": "2026-10-12T10:27:26.229+00:00",
+      "updated_at": "2026-10-12T14:09:26.66+00:00",
+      "customer": {
+        "id": "cust-1791790344048",
+        "area": "Nawa Killi Bypass",
+        "name": "hikmat khan",
+        "phone": "03106854344",
+        "address": "nawa killi zarghoon abad"
+      },
+      "items": [
+        {
+          "id": "item-1791800847527-81f8c",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791800846229",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 100,
+          "total_price": 200,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "hikmat khan",
+      "customer_phone": "03106854344",
+      "customer_area": "Nawa Killi Bypass"
+    },
+    {
+      "id": "ord-1791800845164",
+      "order_number": "ORD-845164",
+      "customer_id": "cust-1791790344048",
+      "total_amount": 200,
+      "payment_type": "Cash",
+      "payment_status": "pending",
+      "order_status": "confirmed",
+      "delivery_date": "2026-10-12",
+      "delivery_address": "nawa killi zarghoon abad",
+      "notes": "",
+      "created_by": "Owner",
+      "created_at": "2026-10-12T10:27:25.164+00:00",
+      "updated_at": "2026-10-12T10:27:25.948808+00:00",
+      "customer": {
+        "id": "cust-1791790344048",
+        "area": "Nawa Killi Bypass",
+        "name": "hikmat khan",
+        "phone": "03106854344",
+        "address": "nawa killi zarghoon abad"
+      },
+      "items": [
+        {
+          "id": "item-1791800846081-gz4wq",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791800845164",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 100,
+          "total_price": 200,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "hikmat khan",
+      "customer_phone": "03106854344",
+      "customer_area": "Nawa Killi Bypass"
+    },
+    {
+      "id": "ord-1791800843712",
+      "order_number": "ORD-843712",
+      "customer_id": "cust-1791790344048",
+      "total_amount": 200,
+      "payment_type": "Cash",
+      "payment_status": "pending",
+      "order_status": "confirmed",
+      "delivery_date": "2026-10-12",
+      "delivery_address": "nawa killi zarghoon abad",
+      "notes": "",
+      "created_by": "Owner",
+      "created_at": "2026-10-12T10:27:23.712+00:00",
+      "updated_at": "2026-10-12T10:27:24.962107+00:00",
+      "customer": {
+        "id": "cust-1791790344048",
+        "area": "Nawa Killi Bypass",
+        "name": "hikmat khan",
+        "phone": "03106854344",
+        "address": "nawa killi zarghoon abad"
+      },
+      "items": [
+        {
+          "id": "item-1791800845112-qgt20",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791800843712",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 100,
+          "total_price": 200,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "hikmat khan",
+      "customer_phone": "03106854344",
+      "customer_area": "Nawa Killi Bypass"
+    },
+    {
+      "id": "ord-1791800007911",
+      "order_number": "ORD-007911",
+      "customer_id": "cust-1791753461967",
+      "total_amount": 644,
+      "payment_type": "Cash",
+      "payment_status": "pending",
+      "order_status": "confirmed",
+      "delivery_date": "2026-10-12",
+      "delivery_address": "NAWAKILI",
+      "notes": "",
+      "created_by": "Owner",
+      "created_at": "2026-10-12T10:13:27.911+00:00",
+      "updated_at": "2026-10-12T10:13:29.113315+00:00",
+      "customer": {
+        "id": "cust-1791753461967",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "NOOR ULLAH",
+        "phone": "234567654321",
+        "address": "7363"
+      },
+      "items": [
+        {
+          "id": "item-1791800009227-1dnyy",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791800007911",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 322,
+          "total_price": 644,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "NOOR ULLAH",
+      "customer_phone": "234567654321",
+      "customer_area": "Chiltan Scheme Airport Road"
+    },
+    {
+      "id": "ord-1791800004307",
+      "order_number": "ORD-004307",
+      "customer_id": "cust-1791753461967",
+      "total_amount": 644,
+      "payment_type": "Cash",
+      "payment_status": "pending",
+      "order_status": "confirmed",
+      "delivery_date": "2026-10-12",
+      "delivery_address": "NAWAKILI",
+      "notes": "",
+      "created_by": "Owner",
+      "created_at": "2026-10-12T10:13:24.307+00:00",
+      "updated_at": "2026-10-12T10:13:25.955609+00:00",
+      "customer": {
+        "id": "cust-1791753461967",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "NOOR ULLAH",
+        "phone": "234567654321",
+        "address": "7363"
+      },
+      "items": [
+        {
+          "id": "item-1791800006102-8wh0k",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791800004307",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 322,
+          "total_price": 644,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "NOOR ULLAH",
+      "customer_phone": "234567654321",
+      "customer_area": "Chiltan Scheme Airport Road"
+    },
     {
       "id": "ord-1791790357847",
       "order_number": "ORD-357847",
@@ -670,9 +1231,374 @@
       "quantity": 4,
       "unit_price": 220,
       "total_price": 880
+    },
+    {
+      "id": "oi-1791817892101-k8kgg",
+      "order_id": "ord-1791817891611",
+      "product_id": "prod-19l-can",
+      "quantity": 2,
+      "unit_price": 220,
+      "total_price": 440
     }
   ],
   "deliveries": [
+    {
+      "id": "del-1791817891766",
+      "delivery_number": "DEL-891766",
+      "order_id": "ord-1791817891611",
+      "customer_id": "cust-1791790344048",
+      "driver_id": "user-driver-1",
+      "vehicle": "Van #1",
+      "delivery_date": "2026-10-12",
+      "delivery_time": "10:00 AM",
+      "status": "delivered",
+      "empty_cans_returned": 1,
+      "payment_collected": 440,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "Rapid completion test",
+      "completed_at": "2026-10-12T15:11:33.507+00:00",
+      "created_at": "2026-10-12T15:11:31.611+00:00",
+      "updated_at": "2026-10-12T15:11:33.507+00:00",
+      "customer": {
+        "id": "cust-1791790344048",
+        "area": "Nawa Killi Bypass",
+        "name": "hikmat khan",
+        "phone": "03106854344",
+        "address": "nawa killi zarghoon abad"
+      },
+      "order": {
+        "id": "ord-1791817891611",
+        "order_number": "ORD-891611",
+        "total_amount": 440
+      },
+      "items": [
+        {
+          "id": "ditem-1791817891766-mqd0r",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can"
+          },
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "delivery_id": "del-1791817891766",
+          "product_name": "AAB E ARWA 19L Premium Water Can"
+        }
+      ],
+      "customer_name": "hikmat khan",
+      "customer_phone": "03106854344",
+      "customer_address": "nawa killi zarghoon abad",
+      "customer_area": "Nawa Killi Bypass",
+      "order_number": "ORD-891611",
+      "total_amount": 440,
+      "driver_name": "Assigned Driver"
+    },
+    {
+      "id": "del-1791800848239",
+      "delivery_number": "DEL-848239",
+      "order_id": "ord-1791800846299",
+      "customer_id": "cust-1791790344048",
+      "driver_id": null,
+      "vehicle": "Van #1",
+      "delivery_date": "2026-10-12",
+      "delivery_time": "Morning",
+      "status": "delivered",
+      "empty_cans_returned": 0,
+      "payment_collected": 200,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "",
+      "completed_at": "2026-10-12T14:03:06.569+00:00",
+      "created_at": "2026-10-12T10:27:26.299+00:00",
+      "updated_at": "2026-10-12T14:03:06.569+00:00",
+      "customer": {
+        "id": "cust-1791790344048",
+        "area": "Nawa Killi Bypass",
+        "name": "hikmat khan",
+        "phone": "03106854344",
+        "address": "nawa killi zarghoon abad"
+      },
+      "order": {
+        "id": "ord-1791800846299",
+        "order_number": "ORD-846299",
+        "total_amount": 200
+      },
+      "items": [
+        {
+          "id": "ditem-1791800848893-n79c7",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can"
+          },
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "delivery_id": "del-1791800848239",
+          "product_name": "AAB E ARWA 19L Premium Water Can"
+        }
+      ],
+      "customer_name": "hikmat khan",
+      "customer_phone": "03106854344",
+      "customer_address": "nawa killi zarghoon abad",
+      "customer_area": "Nawa Killi Bypass",
+      "order_number": "ORD-846299",
+      "total_amount": 200,
+      "driver_name": "Unassigned"
+    },
+    {
+      "id": "del-1791800848182",
+      "delivery_number": "DEL-848182",
+      "order_id": "ord-1791800846229",
+      "customer_id": "cust-1791790344048",
+      "driver_id": null,
+      "vehicle": "Van #1",
+      "delivery_date": "2026-10-12",
+      "delivery_time": "Morning",
+      "status": "delivered",
+      "empty_cans_returned": 0,
+      "payment_collected": 200,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "",
+      "completed_at": "2026-10-12T14:09:26.66+00:00",
+      "created_at": "2026-10-12T10:27:26.229+00:00",
+      "updated_at": "2026-10-12T14:09:26.66+00:00",
+      "customer": {
+        "id": "cust-1791790344048",
+        "area": "Nawa Killi Bypass",
+        "name": "hikmat khan",
+        "phone": "03106854344",
+        "address": "nawa killi zarghoon abad"
+      },
+      "order": {
+        "id": "ord-1791800846229",
+        "order_number": "ORD-846229",
+        "total_amount": 200
+      },
+      "items": [
+        {
+          "id": "ditem-1791800848842-rcuz1",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can"
+          },
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "delivery_id": "del-1791800848182",
+          "product_name": "AAB E ARWA 19L Premium Water Can"
+        }
+      ],
+      "customer_name": "hikmat khan",
+      "customer_phone": "03106854344",
+      "customer_address": "nawa killi zarghoon abad",
+      "customer_area": "Nawa Killi Bypass",
+      "order_number": "ORD-846229",
+      "total_amount": 200,
+      "driver_name": "Unassigned"
+    },
+    {
+      "id": "del-1791800846693",
+      "delivery_number": "DEL-846693",
+      "order_id": "ord-1791800845164",
+      "customer_id": "cust-1791790344048",
+      "driver_id": null,
+      "vehicle": "Van #1",
+      "delivery_date": "2026-10-12",
+      "delivery_time": "Morning",
+      "status": "assigned",
+      "empty_cans_returned": 0,
+      "payment_collected": 0,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "",
+      "completed_at": null,
+      "created_at": "2026-10-12T10:27:25.164+00:00",
+      "updated_at": "2026-10-12T10:27:27.229214+00:00",
+      "customer": {
+        "id": "cust-1791790344048",
+        "area": "Nawa Killi Bypass",
+        "name": "hikmat khan",
+        "phone": "03106854344",
+        "address": "nawa killi zarghoon abad"
+      },
+      "order": {
+        "id": "ord-1791800845164",
+        "order_number": "ORD-845164",
+        "total_amount": 200
+      },
+      "items": [
+        {
+          "id": "ditem-1791800847347-mx59l",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can"
+          },
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "delivery_id": "del-1791800846693",
+          "product_name": "AAB E ARWA 19L Premium Water Can"
+        }
+      ],
+      "customer_name": "hikmat khan",
+      "customer_phone": "03106854344",
+      "customer_address": "nawa killi zarghoon abad",
+      "customer_area": "Nawa Killi Bypass",
+      "order_number": "ORD-845164",
+      "total_amount": 200,
+      "driver_name": "Unassigned"
+    },
+    {
+      "id": "del-1791800845800",
+      "delivery_number": "DEL-845800",
+      "order_id": "ord-1791800843712",
+      "customer_id": "cust-1791790344048",
+      "driver_id": null,
+      "vehicle": "Van #1",
+      "delivery_date": "2026-10-12",
+      "delivery_time": "Morning",
+      "status": "assigned",
+      "empty_cans_returned": 0,
+      "payment_collected": 0,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "",
+      "completed_at": null,
+      "created_at": "2026-10-12T10:27:23.712+00:00",
+      "updated_at": "2026-10-12T10:27:26.362437+00:00",
+      "customer": {
+        "id": "cust-1791790344048",
+        "area": "Nawa Killi Bypass",
+        "name": "hikmat khan",
+        "phone": "03106854344",
+        "address": "nawa killi zarghoon abad"
+      },
+      "order": {
+        "id": "ord-1791800843712",
+        "order_number": "ORD-843712",
+        "total_amount": 200
+      },
+      "items": [
+        {
+          "id": "ditem-1791800846498-3krg6",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can"
+          },
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "delivery_id": "del-1791800845800",
+          "product_name": "AAB E ARWA 19L Premium Water Can"
+        }
+      ],
+      "customer_name": "hikmat khan",
+      "customer_phone": "03106854344",
+      "customer_address": "nawa killi zarghoon abad",
+      "customer_area": "Nawa Killi Bypass",
+      "order_number": "ORD-843712",
+      "total_amount": 200,
+      "driver_name": "Unassigned"
+    },
+    {
+      "id": "del-1791800009915",
+      "delivery_number": "DEL-009915",
+      "order_id": "ord-1791800007911",
+      "customer_id": "cust-1791753461967",
+      "driver_id": null,
+      "vehicle": "Van #1",
+      "delivery_date": "2026-10-12",
+      "delivery_time": "Morning",
+      "status": "assigned",
+      "empty_cans_returned": 0,
+      "payment_collected": 0,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "",
+      "completed_at": null,
+      "created_at": "2026-10-12T10:13:27.911+00:00",
+      "updated_at": "2026-10-12T10:13:30.440917+00:00",
+      "customer": {
+        "id": "cust-1791753461967",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "NOOR ULLAH",
+        "phone": "234567654321",
+        "address": "7363"
+      },
+      "order": {
+        "id": "ord-1791800007911",
+        "order_number": "ORD-007911",
+        "total_amount": 644
+      },
+      "items": [
+        {
+          "id": "ditem-1791800010580-b5nrl",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can"
+          },
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "delivery_id": "del-1791800009915",
+          "product_name": "AAB E ARWA 19L Premium Water Can"
+        }
+      ],
+      "customer_name": "NOOR ULLAH",
+      "customer_phone": "234567654321",
+      "customer_address": "7363",
+      "customer_area": "Chiltan Scheme Airport Road",
+      "order_number": "ORD-007911",
+      "total_amount": 644,
+      "driver_name": "Unassigned"
+    },
+    {
+      "id": "del-1791800006773",
+      "delivery_number": "DEL-006773",
+      "order_id": "ord-1791800004307",
+      "customer_id": "cust-1791753461967",
+      "driver_id": null,
+      "vehicle": "Van #1",
+      "delivery_date": "2026-10-12",
+      "delivery_time": "Morning",
+      "status": "assigned",
+      "empty_cans_returned": 0,
+      "payment_collected": 0,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "",
+      "completed_at": null,
+      "created_at": "2026-10-12T10:13:24.307+00:00",
+      "updated_at": "2026-10-12T10:13:27.268073+00:00",
+      "customer": {
+        "id": "cust-1791753461967",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "NOOR ULLAH",
+        "phone": "234567654321",
+        "address": "7363"
+      },
+      "order": {
+        "id": "ord-1791800004307",
+        "order_number": "ORD-004307",
+        "total_amount": 644
+      },
+      "items": [
+        {
+          "id": "ditem-1791800007395-vfq2t",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can"
+          },
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "delivery_id": "del-1791800006773",
+          "product_name": "AAB E ARWA 19L Premium Water Can"
+        }
+      ],
+      "customer_name": "NOOR ULLAH",
+      "customer_phone": "234567654321",
+      "customer_address": "7363",
+      "customer_area": "Chiltan Scheme Airport Road",
+      "order_number": "ORD-004307",
+      "total_amount": 644,
+      "driver_name": "Unassigned"
+    },
     {
       "id": "del-1791790358970",
       "delivery_number": "DEL-358970",
@@ -1025,5 +1951,37 @@
     "business_address": "Plot 42, Industrial Zone, Water Filtration Estate",
     "currency": "PKR",
     "can_security_deposit": "1200"
+  },
+  "idempotency_records": {
+    "idem-test-ord-1791817891586": {
+      "key": "idem-test-ord-1791817891586",
+      "action": "create_order",
+      "response": {
+        "id": "ord-1791817891611",
+        "orderNumber": "ORD-891611",
+        "success": true
+      },
+      "created_at": "2026-10-12T15:11:32.102Z"
+    },
+    "disp-test-ord-1791817891611-1791817892264": {
+      "key": "disp-test-ord-1791817891611-1791817892264",
+      "action": "dispatch_order",
+      "response": {
+        "id": "del-1791817891766",
+        "updated": true,
+        "order_id": "ord-1791817891611"
+      },
+      "created_at": "2026-10-12T15:11:33.325Z"
+    },
+    "comp-test-del-1791817891766-1791817893502": {
+      "key": "comp-test-del-1791817891766-1791817893502",
+      "action": "complete_delivery",
+      "response": {
+        "success": true,
+        "delivery_id": "del-1791817891766",
+        "status": "delivered"
+      },
+      "created_at": "2026-10-12T15:11:35.652Z"
+    }
   }
 }

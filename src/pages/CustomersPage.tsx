@@ -39,6 +39,7 @@ import {
   Clock,
   AlertCircle,
   HelpCircle,
+  Loader2,
 } from 'lucide-react';
 
 interface CustomerDetailsData {
@@ -72,6 +73,11 @@ export const CustomersPage: React.FC = () => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+
+  // In-flight submission guards
+  const [isSubmittingCustomer, setIsSubmittingCustomer] = useState(false);
+  const [isUpdatingCustomer, setIsUpdatingCustomer] = useState(false);
+  const [isDeletingCustomer, setIsDeletingCustomer] = useState(false);
 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerDetails, setCustomerDetails] = useState<CustomerDetailsData | null>(null);
@@ -161,6 +167,8 @@ export const CustomersPage: React.FC = () => {
 
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingCustomer) return;
+
     if (!formData.name.trim()) {
       toast.error('Customer name is required');
       return;
@@ -183,8 +191,14 @@ export const CustomersPage: React.FC = () => {
       return;
     }
 
+    setIsSubmittingCustomer(true);
+    const customerId = `cust-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const idempotencyKey = `cust-req-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
     try {
       const payload = {
+        id: customerId,
+        idempotency_key: idempotencyKey,
         name: formData.name.trim(),
         phone: formData.phone.trim(),
         address: formData.address.trim(),
@@ -203,7 +217,9 @@ export const CustomersPage: React.FC = () => {
         status: formData.status || 'active',
       };
 
-      const res = await api.post<Customer>('/customers', payload);
+      const res = await api.post<Customer>('/customers', payload, {
+        'x-idempotency-key': idempotencyKey,
+      });
       toast.success(`Customer "${res?.name || formData.name}" registered in Supabase database`);
       setIsAddModalOpen(false);
       resetForm();
@@ -211,12 +227,14 @@ export const CustomersPage: React.FC = () => {
     } catch (err: any) {
       console.error('[Create Customer Error]:', err);
       toast.error(err.message || 'Failed to create customer');
+    } finally {
+      setIsSubmittingCustomer(false);
     }
   };
 
   const handleUpdateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCustomer) return;
+    if (!selectedCustomer || isUpdatingCustomer) return;
     if (!formData.name.trim()) {
       toast.error('Customer name is required');
       return;
@@ -231,6 +249,7 @@ export const CustomersPage: React.FC = () => {
       return;
     }
 
+    setIsUpdatingCustomer(true);
     try {
       await api.put(`/customers/${selectedCustomer.id}`, {
         name: formData.name.trim(),
@@ -263,11 +282,14 @@ export const CustomersPage: React.FC = () => {
     } catch (err: any) {
       console.error('[Update Customer Error]:', err);
       toast.error(err.message || 'Failed to update customer');
+    } finally {
+      setIsUpdatingCustomer(false);
     }
   };
 
   const handleDeleteCustomer = async () => {
-    if (!selectedCustomer) return;
+    if (!selectedCustomer || isDeletingCustomer) return;
+    setIsDeletingCustomer(true);
     try {
       const res = await api.delete<{ success: boolean; archived?: boolean; message?: string }>(
         `/customers/${selectedCustomer.id}`
@@ -284,6 +306,8 @@ export const CustomersPage: React.FC = () => {
     } catch (err: any) {
       console.error('[Delete Customer Error]:', err);
       toast.error(err.message || 'Failed to remove customer');
+    } finally {
+      setIsDeletingCustomer(false);
     }
   };
 
@@ -873,16 +897,25 @@ export const CustomersPage: React.FC = () => {
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
             <button
               type="button"
+              disabled={isSubmittingCustomer}
               onClick={() => setIsAddModalOpen(false)}
-              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 cursor-pointer"
+              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 rounded-lg cursor-pointer"
+              disabled={isSubmittingCustomer}
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xs"
             >
-              Save Customer Profile
+              {isSubmittingCustomer ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Creating Customer...</span>
+                </>
+              ) : (
+                <span>Save Customer Profile</span>
+              )}
             </button>
           </div>
         </form>
@@ -1103,16 +1136,25 @@ export const CustomersPage: React.FC = () => {
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
             <button
               type="button"
+              disabled={isUpdatingCustomer}
               onClick={() => setIsEditModalOpen(false)}
-              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 cursor-pointer"
+              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 rounded-lg cursor-pointer"
+              disabled={isUpdatingCustomer}
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xs"
             >
-              Update Profile
+              {isUpdatingCustomer ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Updating Profile...</span>
+                </>
+              ) : (
+                <span>Update Profile</span>
+              )}
             </button>
           </div>
         </form>
@@ -1663,6 +1705,7 @@ export const CustomersPage: React.FC = () => {
         isOpen={isDeleteConfirmOpen}
         onClose={() => setIsDeleteConfirmOpen(false)}
         onConfirm={handleDeleteCustomer}
+        isLoading={isDeletingCustomer}
         title="Remove Customer Profile"
         message={
           selectedCustomer

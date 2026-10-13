@@ -352,5 +352,5 @@ export interface DashboardSummary {
   recentOrders: Order[];
   lowStock: { name: string; size: string; filled_stock: number; empty_cans: number }[];
   topDebtors: Customer[];
-  salesTrend: { day: string; amount: number }[];
+  salesTrend: { day: string; date?: string; amount: number }[];
 }

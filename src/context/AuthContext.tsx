@@ -262,9 +262,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // Delivery Boy boundary guard: can never access reports, audit, production, inventory, settings, or delete anything
+    // Delivery Boy boundary guard: can never access dashboard, reports, audit, production, inventory, settings, or delete anything
     if (role === 'Delivery Boy' || user.role_id === 'role-delivery') {
-      if (['reports', 'audit', 'production', 'inventory', 'settings'].includes(module)) {
+      if (['dashboard', 'reports', 'audit', 'production', 'inventory', 'settings'].includes(module)) {
         return false;
       }
       if (action === 'can_delete' || action === 'can_approve') {
@@ -285,7 +285,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return !financialOrAdmin;
     }
     if (role === 'Delivery Boy' || user.role_id === 'role-delivery') {
-      if (module === 'dashboard' && action === 'can_view') return true;
       if (module === 'deliveries' && (action === 'can_view' || action === 'can_create' || action === 'can_edit')) return true;
       if (module === 'cans' && (action === 'can_view' || action === 'can_edit')) return true;
       if (module === 'customers' && action === 'can_view') return true;

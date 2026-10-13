@@ -11,7 +11,7 @@ import {
   saveIdempotencyRecord,
   runWithLock,
 } from './db.ts';
-import type { User, Customer, Product, Delivery, Order } from '../types/index.ts';
+import type { User, Customer, Product, Delivery, Order, Permission } from '../types/index.ts';
 
 export const apiRouter = Router();
 
@@ -2501,16 +2501,135 @@ apiRouter.get('/reports/financial', async (req: Request, res: Response) => {
   const authorized = await authorizePermission(req, res, 'reports', 'can_view');
   if (!authorized) return;
 
-  const db = loadDatabase();
-  const totalRevenue = db.payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-  const totalExpenses = db.expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-  const netProfit = totalRevenue - totalExpenses;
+  const role = authorized.role_name || (authorized.role_id === 'role-owner' ? 'Owner' : authorized.role_id === 'role-manager' ? 'Manager' : 'Delivery Boy');
+  if (role !== 'Owner' && authorized.role_id !== 'role-owner') {
+    return res.status(403).json({ message: 'Access Denied: Only Owner can view financial P&L statements.' });
+  }
+
+  const startDate = (req.query.startDate as string) || undefined;
+  const endDate = (req.query.endDate as string) || undefined;
+
+  const supabase = getServerSupabase();
+  let orders: any[] = [];
+  let payments: any[] = [];
+  let expenses: any[] = [];
+  let expenseCategories: any[] = [];
+  let products: any[] = [];
+  let fetchedFromSupabase = false;
+
+  if (supabase) {
+    try {
+      const [ordRes, payRes, expRes, catRes, prodRes] = await Promise.all([
+        supabase.from('orders').select('*, items:order_items(*)'),
+        supabase.from('payments').select('*'),
+        supabase.from('expenses').select('*, category:expense_categories(name)'),
+        supabase.from('expense_categories').select('*'),
+        supabase.from('products').select('*'),
+      ]);
+
+      if (!ordRes.error && ordRes.data) orders = ordRes.data;
+      if (!payRes.error && payRes.data) payments = payRes.data;
+      if (!expRes.error && expRes.data) expenses = expRes.data;
+      if (!catRes.error && catRes.data) expenseCategories = catRes.data;
+      if (!prodRes.error && prodRes.data) products = prodRes.data;
+      fetchedFromSupabase = true;
+    } catch (err) {
+      console.warn('[API /reports/financial] Supabase query notice:', err);
+    }
+  }
+
+  if (!fetchedFromSupabase) {
+    const db = loadDatabase();
+    orders = db.orders || [];
+    payments = db.payments || [];
+    expenses = db.expenses || [];
+    expenseCategories = db.expense_categories || [];
+    products = db.products || [];
+  }
+
+  const isWithinRange = (dateStr?: string | null): boolean => {
+    if (!dateStr) return true;
+    const str = String(dateStr).slice(0, 10);
+    if (startDate && str < startDate) return false;
+    if (endDate && str > endDate) return false;
+    return true;
+  };
+
+  const filteredOrders = startDate || endDate
+    ? orders.filter(o => isWithinRange(o.created_at || o.delivery_date))
+    : orders;
+
+  const filteredPayments = startDate || endDate
+    ? payments.filter(p => isWithinRange(p.payment_date || p.created_at))
+    : payments;
+
+  const filteredExpenses = startDate || endDate
+    ? expenses.filter(e => isWithinRange(e.expense_date || (e as any).date || e.created_at))
+    : expenses;
+
+  // 1. Sales Revenue
+  const salesRevenue = filteredOrders.reduce((s, o) => s + (Number(o.total_amount) || 0), 0);
+
+  // 2. Collections (Received Payments)
+  const collections = filteredPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+
+  // 3. Cost of Goods Sold (COGS)
+  const productCostMap = new Map<string, number>();
+  products.forEach(p => productCostMap.set(p.id, Number(p.cost_price) || 0));
+
+  let cogs = 0;
+  filteredOrders.forEach(o => {
+    (o.items || []).forEach((item: any) => {
+      const unitCost = productCostMap.get(item.product_id) || 0;
+      const qty = Number(item.quantity) || 0;
+      cogs += unitCost * qty;
+    });
+  });
+
+  // 4. Operating Expenses
+  const operatingExpenses = filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+
+  // 5. Gross Profit & Net Profit
+  const grossProfit = salesRevenue - cogs;
+  const netProfit = grossProfit - operatingExpenses;
+  const profitMargin = salesRevenue > 0
+    ? ((netProfit / salesRevenue) * 100).toFixed(1)
+    : '0.0';
+
+  // 6. Expense Category Breakdown
+  const categoryMap = new Map<string, number>();
+  filteredExpenses.forEach(e => {
+    const catName = e.category?.name || (e as any).category_name || (expenseCategories.find(c => c.id === e.category_id)?.name) || 'General';
+    categoryMap.set(catName, (categoryMap.get(catName) || 0) + (Number(e.amount) || 0));
+  });
+
+  const categoryExpenses = Array.from(categoryMap.entries()).map(([name, amount]) => ({
+    name,
+    amount,
+  }));
+
+  const summary = {
+    salesRevenue,
+    collections,
+    cogs,
+    grossProfit,
+    expenses: operatingExpenses,
+    netProfit,
+    profitMargin,
+  };
 
   return res.json({
-    totalRevenue,
-    totalExpenses,
+    summary,
+    salesRevenue,
+    costOfGoodsSold: cogs,
+    grossProfit,
+    operatingExpenses,
     netProfit,
-    margin: totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : '0',
+    profitMargin,
+    totalRevenue: salesRevenue,
+    totalExpenses: operatingExpenses,
+    margin: profitMargin,
+    categoryExpenses,
   });
 });
 
@@ -2518,53 +2637,176 @@ apiRouter.get('/reports/sales', async (req: Request, res: Response) => {
   const authorized = await authorizePermission(req, res, 'reports', 'can_view');
   if (!authorized) return;
 
-  const db = loadDatabase();
-  const monthMap = new Map<string, { total: number; count: number }>();
-  const productMap = new Map<string, { name: string; quantity: number; revenue: number }>();
+  const startDate = (req.query.startDate as string) || undefined;
+  const endDate = (req.query.endDate as string) || undefined;
 
-  db.orders.forEach((o: any) => {
+  const supabase = getServerSupabase();
+  let orders: any[] = [];
+  let products: any[] = [];
+  let customers: any[] = [];
+  let fetchedFromSupabase = false;
+
+  if (supabase) {
+    try {
+      const [ordRes, prodRes, custRes] = await Promise.all([
+        supabase.from('orders').select('*, items:order_items(*)'),
+        supabase.from('products').select('*'),
+        supabase.from('customers').select('*'),
+      ]);
+      if (!ordRes.error && ordRes.data) orders = ordRes.data;
+      if (!prodRes.error && prodRes.data) products = prodRes.data;
+      if (!custRes.error && custRes.data) customers = custRes.data;
+      fetchedFromSupabase = true;
+    } catch (err) {
+      console.warn('[API /reports/sales] Supabase query notice:', err);
+    }
+  }
+
+  if (!fetchedFromSupabase) {
+    const db = loadDatabase();
+    orders = db.orders || [];
+    products = db.products || [];
+    customers = db.customers || [];
+  }
+
+  const isWithinRange = (dateStr?: string | null): boolean => {
+    if (!dateStr) return true;
+    const str = String(dateStr).slice(0, 10);
+    if (startDate && str < startDate) return false;
+    if (endDate && str > endDate) return false;
+    return true;
+  };
+
+  const filteredOrders = startDate || endDate
+    ? orders.filter(o => isWithinRange(o.created_at || o.delivery_date))
+    : orders;
+
+  const monthMap = new Map<string, { total: number; count: number }>();
+  const productMap = new Map<string, { name: string; size: string; total_qty: number; total_revenue: number }>();
+  const areaMap = new Map<string, { area: string; total_orders: number; total_revenue: number }>();
+
+  const productInfoMap = new Map<string, any>();
+  products.forEach(p => productInfoMap.set(p.id, p));
+
+  const customerAreaMap = new Map<string, string>();
+  customers.forEach(c => customerAreaMap.set(c.id, c.area || 'Quetta'));
+
+  filteredOrders.forEach((o: any) => {
     const monthKey = o.created_at ? new Date(o.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Recent';
-    const current = monthMap.get(monthKey) || { total: 0, count: 0 };
-    current.total += Number(o.total_amount) || 0;
-    current.count += 1;
-    monthMap.set(monthKey, current);
+    const currentM = monthMap.get(monthKey) || { total: 0, count: 0 };
+    currentM.total += Number(o.total_amount) || 0;
+    currentM.count += 1;
+    monthMap.set(monthKey, currentM);
+
+    const orderArea = o.customer_area || customerAreaMap.get(o.customer_id) || 'Quetta';
+    const currentA = areaMap.get(orderArea) || { area: orderArea, total_orders: 0, total_revenue: 0 };
+    currentA.total_orders += 1;
+    currentA.total_revenue += Number(o.total_amount) || 0;
+    areaMap.set(orderArea, currentA);
 
     (o.items || []).forEach((item: any) => {
-      const prodName = item.product_name || 'Bottle';
-      const pEntry = productMap.get(prodName) || { name: prodName, quantity: 0, revenue: 0 };
-      pEntry.quantity += Number(item.quantity) || 0;
-      pEntry.revenue += Number(item.total_price || (item.unit_price * item.quantity)) || 0;
-      productMap.set(prodName, pEntry);
+      const prodInfo = productInfoMap.get(item.product_id);
+      const prodName = item.product_name || prodInfo?.name || 'Water Bottle';
+      const prodSize = item.size || prodInfo?.size || '19L';
+      const key = `${prodName}_${prodSize}`;
+      const pEntry = productMap.get(key) || { name: prodName, size: prodSize, total_qty: 0, total_revenue: 0 };
+      pEntry.total_qty += Number(item.quantity) || 0;
+      pEntry.total_revenue += Number(item.total_price || (item.unit_price * item.quantity)) || 0;
+      productMap.set(key, pEntry);
     });
   });
 
+  const productSales = Array.from(productMap.values());
+  const areaSales = Array.from(areaMap.values());
   const monthlySales = Array.from(monthMap.entries()).map(([month, data]) => ({
     month,
     total: data.total,
     count: data.count,
   }));
-
-  const productBreakdown = Array.from(productMap.values());
+  const productBreakdown = productSales.map(p => ({
+    name: p.name,
+    quantity: p.total_qty,
+    revenue: p.total_revenue,
+  }));
 
   return res.json({
+    productSales,
+    areaSales,
     monthlySales,
     productBreakdown,
   });
 });
 
-apiRouter.get('/reports/deliveries', (req: Request, res: Response) => {
-  const db = loadDatabase();
-  const totalDeliveries = db.deliveries.length;
-  const delivered = db.deliveries.filter(d => d.status === 'delivered').length;
+apiRouter.get('/reports/deliveries', async (req: Request, res: Response) => {
+  const authorized = await authorizePermission(req, res, 'reports', 'can_view');
+  if (!authorized) return;
+
+  const supabase = getServerSupabase();
+  let deliveries: any[] = [];
+  let movements: any[] = [];
+  let users: any[] = [];
+  let fetchedFromSupabase = false;
+
+  if (supabase) {
+    try {
+      const [delRes, movRes, userRes] = await Promise.all([
+        supabase.from('deliveries').select('*'),
+        supabase.from('customer_can_movements').select('*'),
+        supabase.from('users').select('*'),
+      ]);
+      if (!delRes.error && delRes.data) deliveries = delRes.data;
+      if (!movRes.error && movRes.data) movements = movRes.data;
+      if (!userRes.error && userRes.data) users = userRes.data;
+      fetchedFromSupabase = true;
+    } catch (err) {
+      console.warn('[API /reports/deliveries] Supabase query notice:', err);
+    }
+  }
+
+  if (!fetchedFromSupabase) {
+    const db = loadDatabase();
+    deliveries = db.deliveries || [];
+    movements = db.customer_can_movements || [];
+    users = db.users || [];
+  }
+
+  const totalDeliveries = deliveries.length;
+  const delivered = deliveries.filter(d => d.status === 'delivered').length;
   const onTimeRate = totalDeliveries > 0 ? `${Math.round((delivered / totalDeliveries) * 100)}%` : '0%';
-  const cansReturned = db.customer_can_movements
-    ? db.customer_can_movements.filter(m => m.movement_type === 'returned').reduce((s, m) => s + (Number(m.quantity) || 0), 0)
-    : 0;
+  const cansReturned = movements
+    .filter(m => m.movement_type === 'returned')
+    .reduce((s, m) => s + (Number(m.quantity) || 0), 0);
+
+  const driverMap = new Map<string, { driver_name: string; total_assigned: number; delivered: number; failed: number; cash_collected: number; empty_cans_collected: number }>();
+
+  deliveries.forEach(d => {
+    const driverName = (d as any).driver_name || (users.find(u => u.id === d.driver_id)?.name) || 'Assigned Driver';
+    const entry = driverMap.get(driverName) || {
+      driver_name: driverName,
+      total_assigned: 0,
+      delivered: 0,
+      failed: 0,
+      cash_collected: 0,
+      empty_cans_collected: 0,
+    };
+    entry.total_assigned += 1;
+    if (d.status === 'delivered') {
+      entry.delivered += 1;
+    } else if (d.status === 'failed' || (d.status as string) === 'cancelled') {
+      entry.failed += 1;
+    }
+    entry.cash_collected += Number(d.payment_collected) || 0;
+    entry.empty_cans_collected += Number(d.empty_cans_returned) || 0;
+    driverMap.set(driverName, entry);
+  });
+
+  const driverPerformance = Array.from(driverMap.values());
 
   return res.json({
     totalDeliveries,
     onTimeRate,
     cansReturned,
+    driverPerformance,
   });
 });
 
@@ -2717,17 +2959,35 @@ apiRouter.get('/dashboard/summary', async (req: Request, res: Response) => {
   const filledStock = inventory.reduce((s, i) => s + (Number(i.filled_stock) || 0), 0) || products.reduce((s, p) => s + (Number(p.filled_stock) || 0), 0);
   const emptyCansStock = inventory.reduce((s, i) => s + (Number(i.empty_cans) || 0), 0) || products.reduce((s, p) => s + (Number(p.empty_cans) || 0), 0);
 
-  // 7-day sales trend from real records
-  const days: { day: string; amount: number }[] = [];
+  // 7-day sales trend from real records (calendar dates ending today)
+  const days: { day: string; date: string; amount: number }[] = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().slice(0, 10);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dayNum = String(d.getDate()).padStart(2, '0');
+    const localDateStr = `${y}-${m}-${dayNum}`;
+    const utcDateStr = d.toISOString().slice(0, 10);
     const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+
     const daySales = orders
-      .filter(o => o.created_at && String(o.created_at).slice(0, 10) === dateStr)
+      .filter(o => {
+        if (!o.created_at) return false;
+        const str = String(o.created_at).trim();
+        if (str.slice(0, 10) === localDateStr || str.slice(0, 10) === utcDateStr) return true;
+        try {
+          const parsed = new Date(str);
+          if (!isNaN(parsed.getTime())) {
+            const parsedLocal = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+            return parsedLocal === localDateStr || parsed.toISOString().slice(0, 10) === utcDateStr;
+          }
+        } catch (_) {}
+        return false;
+      })
       .reduce((s, o) => s + (Number(o.total_amount) || 0), 0);
-    days.push({ day: dayName, amount: daySales });
+
+    days.push({ day: dayName, date: localDateStr, amount: daySales });
   }
 
   return res.json({

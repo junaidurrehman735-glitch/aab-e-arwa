@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { api } from '../lib/api.ts';
 import { DashboardSummary, Order, Customer, Delivery } from '../types/index.ts';
 import { Badge } from '../components/ui/Badge.tsx';
@@ -21,6 +21,28 @@ import {
   ChevronRight,
   Flame,
 } from 'lucide-react';
+
+const formatChartDate = (dayOrDate: string | undefined): string => {
+  if (!dayOrDate) return '';
+  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  if (weekdays.includes(dayOrDate)) return dayOrDate;
+
+  const trimmed = dayOrDate.trim();
+  const parts = trimmed.slice(0, 10).split('-');
+  if (parts.length === 3) {
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+      return new Date(y, m, d).toLocaleDateString('en-US', { weekday: 'short' });
+    }
+  }
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toLocaleDateString('en-US', { weekday: 'short' });
+  }
+  return dayOrDate;
+};
 
 interface DashboardPageProps {
   onNavigate: (page: string) => void;
@@ -120,6 +142,79 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
     fetchDashboard();
   }, []);
 
+  // Hook calls must always run unconditionally at the top level
+  // Generate the last 7 calendar dates correctly using valid Date objects & real persisted order records
+  const normalizedSalesTrend = useMemo(() => {
+    const trendMap = new Map<string, number>();
+
+    (data?.salesTrend || []).forEach((item) => {
+      if (item?.date) trendMap.set(String(item.date).slice(0, 10), Number(item.amount) || 0);
+      if (item?.day) trendMap.set(String(item.day), Number(item.amount) || 0);
+    });
+
+    const orderSalesByDate = new Map<string, number>();
+    (orders || []).forEach((o) => {
+      if (!o.created_at) return;
+      try {
+        const dt = new Date(o.created_at);
+        if (!isNaN(dt.getTime())) {
+          const y = dt.getFullYear();
+          const m = String(dt.getMonth() + 1).padStart(2, '0');
+          const d = String(dt.getDate()).padStart(2, '0');
+          const dStr = `${y}-${m}-${d}`;
+          const current = orderSalesByDate.get(dStr) || 0;
+          orderSalesByDate.set(dStr, current + (Number(o.total_amount) || 0));
+        }
+      } catch (_) {}
+    });
+
+    const result: { day: string; date: string; amount: number; displayLabel: string }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const dayNum = String(d.getDate()).padStart(2, '0');
+      const localDateStr = `${y}-${m}-${dayNum}`;
+      const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+
+      const amount = orderSalesByDate.has(localDateStr)
+        ? (orderSalesByDate.get(localDateStr) || 0)
+        : (trendMap.get(localDateStr) ?? trendMap.get(dayName) ?? 0);
+
+      result.push({
+        day: dayName,
+        date: localDateStr,
+        amount,
+        displayLabel: dayName,
+      });
+    }
+
+    return result;
+  }, [data?.salesTrend, orders]);
+
+  const maxSalesTrend = useMemo(() => {
+    return Math.max(...normalizedSalesTrend.map((t) => t.amount || 0), 1000);
+  }, [normalizedSalesTrend]);
+
+  // Total MTD revenue calculated from real persisted order records
+  const calculatedMtdRevenue = useMemo(() => {
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth();
+    return (orders || [])
+      .filter((o) => {
+        if (!o.created_at) return false;
+        try {
+          const dt = new Date(o.created_at);
+          return !isNaN(dt.getTime()) && dt.getFullYear() === curYear && dt.getMonth() === curMonth;
+        } catch (_) {
+          return false;
+        }
+      })
+      .reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+  }, [orders]);
+
   if (loading && !data) {
     return (
       <div className="space-y-6 animate-pulse">
@@ -173,10 +268,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
     recentOrders = [],
     lowStock = [],
     topDebtors = [],
-    salesTrend = [],
   } = data || ({} as any);
 
-  const maxSalesTrend = Math.max(...(salesTrend || []).map((t) => t?.amount || 0), 1000);
+  const displayMtdRevenue = kpis.monthlyRevenue > 0 ? kpis.monthlyRevenue : calculatedMtdRevenue;
 
   // 1. ORDER STATUS AGGREGATION FROM REAL SUPABASE / DATABASE RECORDS
   const orderStatusCounts = {
@@ -701,16 +795,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
               <p className="text-xs text-slate-500 mt-0.5">Daily order revenue volume</p>
             </div>
             <span className="text-xs font-medium text-slate-500">
-              Total MTD: <span className="font-bold text-slate-900 tabular-nums">PKR {kpis.monthlyRevenue.toLocaleString()}</span>
+              Total MTD: <span className="font-bold text-slate-900 tabular-nums">PKR {displayMtdRevenue.toLocaleString()}</span>
             </span>
           </div>
 
           <div className="h-44 flex items-end gap-3 pt-4 border-b border-slate-100">
-            {salesTrend.map((bar) => {
+            {normalizedSalesTrend.map((bar, idx) => {
               const heightPct = Math.min(100, Math.max(12, (bar.amount / maxSalesTrend) * 100));
-              const dateLabel = new Date(bar.day).toLocaleDateString('en-US', { weekday: 'short' });
+              const dateLabel = bar.displayLabel || formatChartDate(bar.date) || bar.day || 'Day';
               return (
-                <div key={bar.day} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group">
+                <div key={bar.date || idx} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group">
                   <div className="text-[10px] font-mono text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity tabular-nums">
                     {bar.amount > 0 ? (bar.amount / 1000).toFixed(1) + 'k' : '0'}
                   </div>

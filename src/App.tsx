@@ -24,8 +24,35 @@ import { SettingsPage } from './pages/SettingsPage.tsx';
 
 function MainLayout() {
   const { isAuthenticated, isLoading, user, hasPermission } = useAuth();
-  const [currentPage, setCurrentPage] = useState<string>('dashboard');
+  const [currentPage, setCurrentPage] = useState<string>(() => {
+    const saved = localStorage.getItem('aab_user');
+    if (saved) {
+      try {
+        const u = JSON.parse(saved);
+        if (u.role_name === 'Delivery Boy' || u.role_id === 'role-delivery') {
+          return 'deliveries';
+        }
+      } catch (_) {}
+    }
+    return 'dashboard';
+  });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Default route redirection based on role
+  React.useEffect(() => {
+    if (user) {
+      const isDeliveryBoy = user.role_name === 'Delivery Boy' || user.role_id === 'role-delivery';
+      if (isDeliveryBoy) {
+        if (currentPage === 'dashboard' || !hasPermission(currentPage, 'can_view')) {
+          setCurrentPage('deliveries');
+        }
+      } else {
+        if (!hasPermission(currentPage, 'can_view')) {
+          setCurrentPage(hasPermission('dashboard', 'can_view') ? 'dashboard' : 'orders');
+        }
+      }
+    }
+  }, [user?.id, user?.role_name, user?.role_id]);
 
   if (isLoading) {
     return (
@@ -62,8 +89,10 @@ function MainLayout() {
   };
 
   const renderPage = () => {
+    const isDeliveryBoy = user?.role_name === 'Delivery Boy' || user?.role_id === 'role-delivery';
+
     // Role-based route guard: verify module permission before rendering
-    if (currentPage !== 'dashboard' && !hasPermission(currentPage, 'can_view')) {
+    if (!hasPermission(currentPage, 'can_view')) {
       return (
         <div className="bg-white rounded-xl border border-red-200/80 p-8 text-center max-w-md mx-auto my-12 shadow-xs space-y-4">
           <div className="w-12 h-12 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto text-xl font-bold">
@@ -76,10 +105,10 @@ function MainLayout() {
             </p>
           </div>
           <button
-            onClick={() => setCurrentPage('dashboard')}
+            onClick={() => setCurrentPage(isDeliveryBoy ? 'deliveries' : 'dashboard')}
             className="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors cursor-pointer"
           >
-            Return to Dashboard
+            {isDeliveryBoy ? 'Go to Deliveries' : 'Return to Dashboard'}
           </button>
         </div>
       );

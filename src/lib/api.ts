@@ -245,11 +245,16 @@ async function handleSupabaseRoute<T>(method: string, endpoint: string, body?: a
 
   // 14. REPORTS
   if (pathParts[0] === 'reports') {
+    const qStr = endpoint.includes('?') ? endpoint.split('?')[1] : '';
+    const qParams = new URLSearchParams(qStr);
+    const startDate = qParams.get('startDate') || undefined;
+    const endDate = qParams.get('endDate') || undefined;
+
     if (pathParts[1] === 'financial') {
-      return (await SupabaseDataService.getFinancialReport()) as unknown as T;
+      return (await SupabaseDataService.getFinancialReport(startDate, endDate)) as unknown as T;
     }
     if (pathParts[1] === 'sales') {
-      return (await SupabaseDataService.getSalesReport()) as unknown as T;
+      return (await SupabaseDataService.getSalesReport(startDate, endDate)) as unknown as T;
     }
     if (pathParts[1] === 'deliveries') {
       return (await SupabaseDataService.getDeliveryReport()) as unknown as T;

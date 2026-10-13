@@ -59,6 +59,7 @@ export const OrdersPage: React.FC = () => {
   // Rapid Submission / Double Click Protection states
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [isDispatching, setIsDispatching] = useState(false);
+  const [isInlineCreatingCustomer, setIsInlineCreatingCustomer] = useState(false);
 
   // New Order Form state
   const [orderCustomer, setOrderCustomer] = useState<Customer | null>(null);
@@ -198,6 +199,8 @@ export const OrdersPage: React.FC = () => {
 
   const handleInlineCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isInlineCreatingCustomer) return;
+
     if (!newCustomerForm.name.trim()) {
       toast.error('Customer Name is required');
       return;
@@ -225,9 +228,15 @@ export const OrdersPage: React.FC = () => {
     const paymentTypeVal = newCustomerForm.cash_status === 'Credit Account' ? 'Credit' : 'Cash';
 
     if (saveMode === 'future') {
+      setIsInlineCreatingCustomer(true);
+      const customerId = `cust-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const idempotencyKey = `cust-req-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
       try {
         const typeId = (CUSTOMER_TYPE_IDS as Record<string, string>)[newCustomerForm.customer_type_name] || 'ct-home';
         const created = await api.post<Customer>('/customers', {
+          id: customerId,
+          idempotency_key: idempotencyKey,
           name: newCustomerForm.name.trim(),
           phone: newCustomerForm.phone.trim(),
           address: newCustomerForm.address.trim(),
@@ -240,14 +249,18 @@ export const OrdersPage: React.FC = () => {
           cans_held: cansNum,
           delivery_instructions: newCustomerForm.delivery_instructions.trim(),
           status: 'active',
+        }, {
+          'x-idempotency-key': idempotencyKey,
         });
 
         toast.success(`Customer "${created.name}" saved to Supabase & selected for this order!`);
-        setCustomers((prev) => [created, ...prev]);
+        setCustomers((prev) => [created, ...prev.filter(c => c.id !== created.id)]);
         handleSelectCustomer(created);
         setIsCreateCustomerOpen(false);
       } catch (err: any) {
         toast.error(err.message || 'Failed to save customer to Supabase');
+      } finally {
+        setIsInlineCreatingCustomer(false);
       }
     } else {
       // Temporary Customer: use only for this current order and do NOT add to permanent list
@@ -872,17 +885,26 @@ export const OrdersPage: React.FC = () => {
                   <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
                     <button
                       type="button"
+                      disabled={isInlineCreatingCustomer}
                       onClick={() => setIsCreateCustomerOpen(false)}
-                      className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800 font-medium rounded-lg border border-slate-200 hover:bg-slate-100 cursor-pointer transition-colors"
+                      className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800 font-medium rounded-lg border border-slate-200 hover:bg-slate-100 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Cancel
                     </button>
                     <button
                       type="button"
+                      disabled={isInlineCreatingCustomer}
                       onClick={handleInlineCreateCustomer}
-                      className="px-4 py-1.5 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 rounded-lg shadow-xs cursor-pointer transition-colors"
+                      className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 rounded-lg shadow-xs cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {saveMode === 'future' ? 'Save & Select Customer' : 'Use as Temporary Customer'}
+                      {isInlineCreatingCustomer ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Saving Customer...</span>
+                        </>
+                      ) : (
+                        <span>{saveMode === 'future' ? 'Save & Select Customer' : 'Use as Temporary Customer'}</span>
+                      )}
                     </button>
                   </div>
                 </div>

@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { createClient } from '@supabase/supabase-js';
 import {
   loadDatabase,
   saveDatabase,
@@ -11,7 +12,7 @@ import {
   saveIdempotencyRecord,
   runWithLock,
 } from './db.ts';
-import type { User, Customer, Product, Delivery, Order, Permission } from '../types/index.ts';
+import type { User, Customer, Product, Delivery, Order, Permission, AuditLog } from '../types/index.ts';
 
 export const apiRouter = Router();
 
@@ -107,6 +108,122 @@ async function authorizePermission(
     message: `Access Denied: ${role} role lacks ${action.replace('_', ' ')} permission for ${module}.`
   });
   return null;
+}
+
+// -----------------------------------------------------------------------------
+// Centralized System Audit Trail Logger
+// Persists immutable audit records to Supabase & Central Database Cache
+// -----------------------------------------------------------------------------
+export async function logAuditEvent(params: {
+  req: Request;
+  action: string;
+  module: string;
+  record_ref?: string;
+  details: string;
+  old_value?: any;
+  new_value?: any;
+}): Promise<AuditLog | null> {
+  try {
+    const authUser = await getAuthUserFromRequest(params.req);
+    const db = loadDatabase();
+    const fallbackOwner = db.users.find(u => u.role_name === 'Owner' || u.role_id === 'role-owner') || db.users[0];
+
+    const userId = authUser?.id || (params.req.headers['x-user-id'] as string) || fallbackOwner?.id || 'owner-system';
+    const userName = authUser?.name || fallbackOwner?.name || 'System Operator';
+    const userRole = authUser?.role_name || fallbackOwner?.role_name || 'Owner';
+    const ip = (params.req.headers['x-forwarded-for'] as string) || params.req.ip || '127.0.0.1';
+    const nowIso = new Date().toISOString();
+
+    const auditEntry: AuditLog = {
+      id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      user_id: userId,
+      user_name: userName,
+      user_role: userRole,
+      action: params.action,
+      module: params.module,
+      record_ref: params.record_ref || '',
+      details: params.details,
+      old_value: params.old_value !== undefined ? params.old_value : null,
+      new_value: params.new_value !== undefined ? params.new_value : null,
+      ip_address: ip,
+      created_at: nowIso,
+    };
+
+    if (!db.audit_logs) db.audit_logs = [];
+
+    // Duplicate action protection: prevent identical audit log within 5 seconds for same action & record_ref
+    const recentDuplicate = db.audit_logs.find(l =>
+      l.action === auditEntry.action &&
+      l.record_ref === auditEntry.record_ref &&
+      Math.abs(new Date(nowIso).getTime() - new Date(l.created_at).getTime()) < 5000
+    );
+    if (recentDuplicate) {
+      console.log(`[AUDIT] Duplicate prevented for ${auditEntry.action} on ${auditEntry.record_ref}`);
+      return recentDuplicate;
+    }
+
+    // 1. Persist in local database (disk persistent via aab_database.json)
+    db.audit_logs.unshift(auditEntry);
+    if (db.audit_logs.length > 1000) {
+      db.audit_logs = db.audit_logs.slice(0, 1000);
+    }
+    saveDatabase(db);
+
+    // 2. Persist in Supabase audit_logs table
+    const authHeader = params.req.headers.authorization;
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
+    const supabaseKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+
+    let savedToSupabase = false;
+    if (authHeader && authHeader.startsWith('Bearer ') && supabaseUrl && supabaseKey) {
+      try {
+        const userSupabase = createClient(supabaseUrl, supabaseKey, {
+          global: { headers: { Authorization: authHeader } },
+          auth: { persistSession: false },
+        });
+        const { error } = await userSupabase.from('audit_logs').insert({
+          id: auditEntry.id,
+          user_id: auditEntry.user_id,
+          user_name: auditEntry.user_name,
+          action: auditEntry.action,
+          module: auditEntry.module,
+          record_ref: auditEntry.record_ref,
+          details: auditEntry.details,
+          ip_address: auditEntry.ip_address,
+          created_at: auditEntry.created_at,
+        });
+        if (!error) savedToSupabase = true;
+      } catch (err: any) {
+        console.warn('[AUDIT] User Supabase insert warning:', err?.message || err);
+      }
+    }
+
+    if (!savedToSupabase) {
+      const serverSupabase = getServerSupabase();
+      if (serverSupabase) {
+        try {
+          const { error } = await serverSupabase.from('audit_logs').insert({
+            id: auditEntry.id,
+            user_id: auditEntry.user_id,
+            user_name: auditEntry.user_name,
+            action: auditEntry.action,
+            module: auditEntry.module,
+            record_ref: auditEntry.record_ref,
+            details: auditEntry.details,
+            ip_address: auditEntry.ip_address,
+            created_at: auditEntry.created_at,
+          });
+          if (!error) savedToSupabase = true;
+        } catch (_) {}
+      }
+    }
+
+    console.log(`[AUDIT] Recorded: [${auditEntry.module.toUpperCase()}] ${auditEntry.action} by ${userName} (${userRole}) - ${auditEntry.details}`);
+    return auditEntry;
+  } catch (err: any) {
+    console.error('[AUDIT] Failed to record audit log:', err?.message || err);
+    return null;
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -343,6 +460,15 @@ apiRouter.put('/roles/:roleId/permissions', async (req: Request, res: Response) 
       }
     }
 
+    await logAuditEvent({
+      req,
+      action: 'CHANGE_PERMISSIONS',
+      module: 'staff',
+      record_ref: roleId,
+      details: `Updated RBAC permissions for role "${roleId}" across ${permissions.length} modules`,
+      new_value: permissions,
+    });
+
     return res.json({ success: true, permissions: getRolePermissions(roleId) });
   } catch (err: any) {
     return res.status(500).json({ message: err.message || 'Failed to update permissions' });
@@ -430,6 +556,15 @@ apiRouter.post('/staff', async (req: Request, res: Response) => {
       } catch (_) {}
     }
 
+    await logAuditEvent({
+      req,
+      action: 'CREATE_STAFF',
+      module: 'staff',
+      record_ref: id,
+      details: `Added staff member "${newUser.name}" (${cleanEmail}) with role "${newUser.role_name}"`,
+      new_value: { name: newUser.name, email: cleanEmail, role: newUser.role_name, phone: newUser.phone, status: newUser.status },
+    });
+
     return res.json({ id, user: newUser });
   } catch (err: any) {
     return res.status(500).json({ message: err.message });
@@ -449,6 +584,10 @@ apiRouter.put('/staff/:id', async (req: Request, res: Response) => {
     if (!user) {
       return res.status(404).json({ message: 'Staff member not found' });
     }
+
+    const prevName = user.name;
+    const prevStatus = user.status;
+    const prevRole = user.role_name;
 
     if (updates.name) user.name = updates.name.trim();
     if (updates.phone !== undefined) user.phone = updates.phone;
@@ -475,6 +614,26 @@ apiRouter.put('/staff/:id', async (req: Request, res: Response) => {
         }).eq('id', id);
       } catch (_) {}
     }
+
+    let staffAction = 'UPDATE_STAFF';
+    let detailMsg = `Updated staff member "${user.name}" details`;
+    if (updates.status && updates.status !== prevStatus) {
+      staffAction = updates.status === 'inactive' ? 'DEACTIVATE_STAFF' : 'ACTIVATE_STAFF';
+      detailMsg = `${updates.status === 'inactive' ? 'Deactivated' : 'Activated'} staff member "${user.name}"`;
+    } else if ((updates.role_id || updates.role_name) && user.role_name !== prevRole) {
+      staffAction = 'CHANGE_ROLE';
+      detailMsg = `Changed role for staff member "${user.name}" from ${prevRole} to ${user.role_name}`;
+    }
+
+    await logAuditEvent({
+      req,
+      action: staffAction,
+      module: 'staff',
+      record_ref: id,
+      details: detailMsg,
+      old_value: { name: prevName, role: prevRole, status: prevStatus },
+      new_value: { name: user.name, role: user.role_name, status: user.status },
+    });
 
     return res.json({ success: true, user });
   } catch (err: any) {
@@ -741,16 +900,14 @@ apiRouter.post('/customers', async (req: Request, res: Response) => {
         }
 
         // Record in audit_logs for traceability
-        try {
-          await supabase.from('audit_logs').insert({
-            id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            action: 'create_customer',
-            module: 'customers',
-            record_ref: inserted.id,
-            details: { name: inserted.name, phone: inserted.phone, area: inserted.area, idempotency_key: idempotencyKey || null },
-            created_at: new Date().toISOString(),
-          });
-        } catch (_) {}
+        await logAuditEvent({
+          req,
+          action: 'CREATE_CUSTOMER',
+          module: 'customers',
+          record_ref: inserted.id,
+          details: `Created customer "${inserted.name}" (Phone: ${inserted.phone}) in area "${inserted.area}" | Selling Rate: PKR ${inserted.selling_rate}`,
+          new_value: { name: inserted.name, phone: inserted.phone, area: inserted.area, selling_rate: inserted.selling_rate, status: inserted.status },
+        });
 
         console.log(`[CUSTOMER] Created & verified in Supabase: ${inserted.name} (${inserted.id})`);
         return res.status(201).json(inserted);
@@ -764,6 +921,15 @@ apiRouter.post('/customers', async (req: Request, res: Response) => {
       if (idempotencyKey) {
         saveIdempotencyRecord(idempotencyKey, 'create_customer', cleanCustomer);
       }
+
+      await logAuditEvent({
+        req,
+        action: 'CREATE_CUSTOMER',
+        module: 'customers',
+        record_ref: cleanCustomer.id,
+        details: `Created customer "${cleanCustomer.name}" (Phone: ${cleanCustomer.phone}) in area "${cleanCustomer.area}" | Selling Rate: PKR ${cleanCustomer.selling_rate}`,
+        new_value: { name: cleanCustomer.name, phone: cleanCustomer.phone, area: cleanCustomer.area, selling_rate: cleanCustomer.selling_rate, status: cleanCustomer.status },
+      });
 
       console.log(`[CUSTOMER] Created & saved in central DB: ${cleanCustomer.name} (${cleanCustomer.id})`);
       return res.status(201).json(cleanCustomer);
@@ -786,6 +952,9 @@ apiRouter.put('/customers/:id', async (req: Request, res: Response) => {
     delete cleanUpdates.customer_type_name;
     delete cleanUpdates.company_cans;
 
+    const db = loadDatabase();
+    const prevCust = db.customers.find(c => c.id === id);
+
     const supabase = getServerSupabase();
     if (supabase) {
       const { data, error } = await supabase
@@ -804,7 +973,6 @@ apiRouter.put('/customers/:id', async (req: Request, res: Response) => {
       }
 
       // Update central DB cache
-      const db = loadDatabase();
       const idx = db.customers.findIndex(c => c.id === id);
       if (idx !== -1) {
         db.customers[idx] = { ...db.customers[idx], ...(data as Customer) };
@@ -812,17 +980,39 @@ apiRouter.put('/customers/:id', async (req: Request, res: Response) => {
         db.customers.unshift(data as Customer);
       }
       saveDatabase(db);
+
+      const custName = (data as any)?.name || prevCust?.name || id;
+      await logAuditEvent({
+        req,
+        action: 'UPDATE_CUSTOMER',
+        module: 'customers',
+        record_ref: id,
+        details: `Updated customer "${custName}" profile details`,
+        old_value: prevCust ? { name: prevCust.name, phone: prevCust.phone, area: prevCust.area, selling_rate: prevCust.selling_rate, status: prevCust.status } : null,
+        new_value: cleanUpdates,
+      });
+
       console.log(`[CUSTOMER] Updated & verified in Supabase: (${id})`);
       return res.json({ success: true, customer: data });
     }
 
-    const db = loadDatabase();
     const idx = db.customers.findIndex(c => c.id === id);
     if (idx === -1) {
       return res.status(404).json({ message: 'Customer not found' });
     }
     db.customers[idx] = { ...db.customers[idx], ...cleanUpdates };
     saveDatabase(db);
+
+    await logAuditEvent({
+      req,
+      action: 'UPDATE_CUSTOMER',
+      module: 'customers',
+      record_ref: id,
+      details: `Updated customer "${db.customers[idx].name}" profile details`,
+      old_value: prevCust ? { name: prevCust.name, phone: prevCust.phone, area: prevCust.area, selling_rate: prevCust.selling_rate, status: prevCust.status } : null,
+      new_value: cleanUpdates,
+    });
+
     return res.json({ success: true, customer: db.customers[idx] });
   } catch (err: any) {
     console.error('[API /customers/:id] Exception:', err?.message || err);
@@ -836,19 +1026,20 @@ apiRouter.delete('/customers/:id', async (req: Request, res: Response) => {
     if (!authorized) return;
 
     const { id } = req.params;
+    const db = loadDatabase();
+    const existingInDb = db.customers.find(c => c.id === id);
     const supabase = getServerSupabase();
     let isArchived = false;
+    let custName = existingInDb?.name || id;
 
     if (supabase) {
       // Check if customer exists in Supabase
       const { data: existing } = await supabase.from('customers').select('id, name').eq('id', id).maybeSingle();
-      if (!existing) {
+      if (!existing && !existingInDb) {
         // Idempotent delete: customer already removed or does not exist
-        const db = loadDatabase();
-        db.customers = db.customers.filter(c => c.id !== id);
-        saveDatabase(db);
         return res.json({ success: true, message: 'Customer profile already removed or not found.' });
       }
+      if (existing?.name) custName = existing.name;
 
       // Check if customer has historical records: orders, deliveries, payments, or ledger
       const [ordRes, delRes, payRes, ledgRes] = await Promise.all([
@@ -889,7 +1080,6 @@ apiRouter.delete('/customers/:id', async (req: Request, res: Response) => {
     }
 
     // Update central database
-    const db = loadDatabase();
     if (isArchived) {
       const c = db.customers.find(x => x.id === id);
       if (c) c.status = 'inactive';
@@ -897,6 +1087,15 @@ apiRouter.delete('/customers/:id', async (req: Request, res: Response) => {
       db.customers = db.customers.filter(c => c.id !== id);
     }
     saveDatabase(db);
+
+    await logAuditEvent({
+      req,
+      action: isArchived ? 'ARCHIVE_CUSTOMER' : 'DELETE_CUSTOMER',
+      module: 'customers',
+      record_ref: id,
+      details: `${isArchived ? 'Safely archived' : 'Permanently deleted'} customer profile "${custName}"`,
+      old_value: existingInDb ? { id, name: existingInDb.name, phone: existingInDb.phone } : null,
+    });
 
     return res.json({
       success: true,
@@ -1010,6 +1209,15 @@ apiRouter.post('/products', async (req: Request, res: Response) => {
       }
     }
 
+    await logAuditEvent({
+      req,
+      action: 'CREATE_PRODUCT',
+      module: 'products',
+      record_ref: id,
+      details: `Created product "${newProd.name}" (${newProd.size}) | Selling: PKR ${newProd.selling_price} | Cost: PKR ${newProd.cost_price}`,
+      new_value: { name: newProd.name, size: newProd.size, selling_price: newProd.selling_price, cost_price: newProd.cost_price },
+    });
+
     return res.status(201).json(newProd);
   } catch (err: any) {
     return res.status(500).json({ message: err.message });
@@ -1027,6 +1235,13 @@ apiRouter.put('/products/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Product not found' });
     }
 
+    const prevProd = { ...db.products[idx] };
+    const oldActive = prevProd?.is_active ?? 1;
+    const newActive = updates.is_active !== undefined ? Number(updates.is_active) : oldActive;
+    let prodAction = 'UPDATE_PRODUCT';
+    if (newActive === 0 && oldActive === 1) prodAction = 'ARCHIVE_PRODUCT';
+    else if (newActive === 1 && oldActive === 0) prodAction = 'ACTIVATE_PRODUCT';
+
     db.products[idx] = { ...db.products[idx], ...updates };
     saveDatabase(db);
 
@@ -1040,6 +1255,7 @@ apiRouter.put('/products/:id', async (req: Request, res: Response) => {
           ...(updates.selling_price !== undefined && { selling_price: Number(updates.selling_price) }),
           ...(updates.cost_price !== undefined && { cost_price: Number(updates.cost_price) }),
           ...(updates.is_reusable !== undefined && { is_reusable: updates.is_reusable ? 1 : 0 }),
+          ...(updates.is_active !== undefined && { is_active: Number(updates.is_active) }),
           updated_at: new Date().toISOString(),
         };
         await supabase.from('products').update(cleanUpdates).eq('id', id);
@@ -1048,7 +1264,55 @@ apiRouter.put('/products/:id', async (req: Request, res: Response) => {
       }
     }
 
+    await logAuditEvent({
+      req,
+      action: prodAction,
+      module: 'products',
+      record_ref: id,
+      details: `${prodAction === 'ARCHIVE_PRODUCT' ? 'Archived' : prodAction === 'ACTIVATE_PRODUCT' ? 'Activated' : 'Updated'} product "${updates.name || prevProd?.name || id}"`,
+      old_value: { name: prevProd?.name, selling_price: prevProd?.selling_price, is_active: oldActive },
+      new_value: updates,
+    });
+
     return res.json({ success: true, product: db.products[idx] });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+apiRouter.delete('/products/:id', async (req: Request, res: Response) => {
+  try {
+    const authorized = await authorizePermission(req, res, 'products', 'can_delete');
+    if (!authorized) return;
+
+    const { id } = req.params;
+    const db = loadDatabase();
+    const prod = db.products.find(p => p.id === id);
+    if (!prod) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    prod.is_active = 0;
+    saveDatabase(db);
+
+    const supabase = getServerSupabase();
+    if (supabase) {
+      try {
+        await supabase.from('products').update({ is_active: 0 }).eq('id', id);
+      } catch (_) {}
+    }
+
+    await logAuditEvent({
+      req,
+      action: 'ARCHIVE_PRODUCT',
+      module: 'products',
+      record_ref: id,
+      details: `Archived/deleted product "${prod.name}"`,
+      old_value: { id, name: prod.name, is_active: 1 },
+      new_value: { is_active: 0 },
+    });
+
+    return res.json({ success: true, message: 'Product archived successfully' });
   } catch (err: any) {
     return res.status(500).json({ message: err.message });
   }
@@ -1205,6 +1469,17 @@ apiRouter.post('/inventory/adjust', async (req: Request, res: Response) => {
     } as any);
     saveDatabase(db);
 
+    const act = delta > 0 ? 'STOCK_INCREASE' : delta < 0 ? 'STOCK_DECREASE' : 'STOCK_ADJUSTMENT';
+    await logAuditEvent({
+      req,
+      action: act,
+      module: 'inventory',
+      record_ref: product_id,
+      details: `Stock adjustment for "${prod?.name || product_id}": ${stock_type} stock adjusted from ${prevStock} to ${newStock} (${delta >= 0 ? '+' : ''}${delta}) | Reason: ${reason || 'Manual Adjustment'}`,
+      old_value: { product_id, stock_type, stock: prevStock },
+      new_value: { product_id, stock_type, stock: newStock, delta, reason: reason || 'Manual Adjustment' },
+    });
+
     return res.json({
       success: true,
       previous_stock: prevStock,
@@ -1252,7 +1527,56 @@ apiRouter.post('/production', async (req: Request, res: Response) => {
     }
     saveDatabase(db);
 
+    await logAuditEvent({
+      req,
+      action: 'STOCK_TRANSFER',
+      module: 'inventory',
+      record_ref: newRecord.id,
+      details: `Production bottling & stock transfer: filled ${quantity_filled} units of "${prod?.name || product_id}" from ${source_tank || 'Main Tank'} (empty cans deducted, filled stock increased)`,
+      new_value: { product_id, quantity_filled: Number(quantity_filled), source_tank: newRecord.source_tank, notes },
+    });
+
     return res.json({ success: true, record: newRecord });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+apiRouter.post('/inventory/transfer', async (req: Request, res: Response) => {
+  try {
+    const authorized = await authorizePermission(req, res, 'inventory', 'can_edit');
+    if (!authorized) return;
+
+    const { product_id, from_type = 'empty', to_type = 'filled', quantity, reason } = req.body;
+    const qty = Number(quantity);
+    if (isNaN(qty) || qty <= 0) {
+      return res.status(400).json({ message: 'Valid positive quantity required' });
+    }
+
+    const db = loadDatabase();
+    const inv = db.inventory.find(i => i.product_id === product_id);
+    const prod = db.products.find(p => p.id === product_id);
+    const fromField = from_type === 'empty' ? 'empty_cans' : 'filled_stock';
+    const toField = to_type === 'empty' ? 'empty_cans' : 'filled_stock';
+
+    if (inv) {
+      inv[fromField] = Math.max(0, (inv[fromField] || 0) - qty);
+      inv[toField] = (inv[toField] || 0) + qty;
+      saveDatabase(db);
+    }
+
+    const transferId = `trf-${Date.now()}`;
+    await logAuditEvent({
+      req,
+      action: 'STOCK_TRANSFER',
+      module: 'inventory',
+      record_ref: transferId,
+      details: `Stock transfer: moved ${qty} units of "${prod?.name || product_id}" from ${from_type} to ${to_type} | Reason: ${reason || 'Operational transfer'}`,
+      old_value: { from_type, to_type, quantity: qty },
+      new_value: { from_type, to_type, quantity: qty, reason },
+    });
+
+    return res.json({ success: true, message: 'Stock transferred successfully' });
   } catch (err: any) {
     return res.status(500).json({ message: err.message });
   }
@@ -1551,6 +1875,15 @@ apiRouter.post('/orders', async (req: Request, res: Response) => {
         saveIdempotencyRecord(idempotencyKey, 'create_order', resultPayload);
       }
 
+      await logAuditEvent({
+        req,
+        action: 'CREATE_ORDER',
+        module: 'orders',
+        record_ref: id,
+        details: `Created order #${orderNumber} for customer "${cust?.name || cleanOrderRow.customer_id}" | Total: PKR ${cleanOrderRow.total_amount} | Delivery: ${cleanOrderRow.delivery_date}`,
+        new_value: { order_number: orderNumber, total_amount: cleanOrderRow.total_amount, delivery_date: cleanOrderRow.delivery_date, items_count: (orderData.items || []).length },
+      });
+
       return res.status(201).json(resultPayload);
     });
   } catch (err: any) {
@@ -1562,6 +1895,8 @@ apiRouter.post('/orders', async (req: Request, res: Response) => {
 apiRouter.delete('/orders/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const db = loadDatabase();
+    const ordToDel = db.orders.find(o => o.id === id);
     const supabase = getServerSupabase();
 
     if (supabase) {
@@ -1581,11 +1916,19 @@ apiRouter.delete('/orders/:id', async (req: Request, res: Response) => {
       }
     }
 
-    const db = loadDatabase();
     db.orders = db.orders.filter(o => o.id !== id);
     db.order_items = db.order_items.filter(oi => oi.order_id !== id);
     db.deliveries = db.deliveries.filter(d => d.order_id !== id);
     saveDatabase(db);
+
+    await logAuditEvent({
+      req,
+      action: 'CANCEL_ORDER',
+      module: 'orders',
+      record_ref: id,
+      details: `Deleted/cancelled order #${ordToDel?.order_number || id}`,
+      old_value: ordToDel ? { id, order_number: ordToDel.order_number, total_amount: ordToDel.total_amount, status: ordToDel.order_status } : null,
+    });
 
     return res.json({ success: true });
   } catch (err: any) {
@@ -1598,6 +1941,10 @@ apiRouter.put('/orders/:id/status', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { status, payment_status } = req.body;
     const supabase = getServerSupabase();
+    const db = loadDatabase();
+    const ord = db.orders.find(o => o.id === id);
+    const prevStatus = ord?.order_status || 'pending';
+    const prevPayStatus = ord?.payment_status || 'pending';
 
     if (supabase) {
       const updates: any = { updated_at: new Date().toISOString() };
@@ -1607,15 +1954,75 @@ apiRouter.put('/orders/:id/status', async (req: Request, res: Response) => {
       if (error) return res.status(500).json({ message: error.message });
     }
 
-    const db = loadDatabase();
-    const ord = db.orders.find(o => o.id === id);
     if (ord) {
       if (status) ord.order_status = status;
       if (payment_status) ord.payment_status = payment_status;
       saveDatabase(db);
     }
 
+    let actionType = 'UPDATE_ORDER';
+    if (status === 'confirmed') actionType = 'CONFIRM_ORDER';
+    else if (status === 'out_for_delivery') actionType = 'DISPATCH_ORDER';
+    else if (status === 'completed' || status === 'delivered') actionType = 'COMPLETE_ORDER';
+    else if (status === 'cancelled') actionType = 'CANCEL_ORDER';
+
+    await logAuditEvent({
+      req,
+      action: actionType,
+      module: 'orders',
+      record_ref: id,
+      details: `Order #${ord?.order_number || id} status changed: ${prevStatus} → ${status || prevStatus}${payment_status ? ` | Payment: ${payment_status}` : ''}`,
+      old_value: { order_status: prevStatus, payment_status: prevPayStatus },
+      new_value: { order_status: status || prevStatus, payment_status: payment_status || prevPayStatus },
+    });
+
     return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+apiRouter.put('/orders/:id', async (req: Request, res: Response) => {
+  try {
+    const authorized = await authorizePermission(req, res, 'orders', 'can_edit');
+    if (!authorized) return;
+
+    const { id } = req.params;
+    const updates = req.body;
+    const db = loadDatabase();
+    const ord = db.orders.find(o => o.id === id);
+    if (!ord) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    const prevOrder = { ...ord };
+    Object.assign(ord, updates, { updated_at: new Date().toISOString() });
+    saveDatabase(db);
+
+    const supabase = getServerSupabase();
+    if (supabase) {
+      try {
+        const cleanUpdates: any = { updated_at: new Date().toISOString() };
+        if (updates.delivery_date) cleanUpdates.delivery_date = updates.delivery_date;
+        if (updates.notes !== undefined) cleanUpdates.notes = updates.notes;
+        if (updates.total_amount !== undefined) cleanUpdates.total_amount = Number(updates.total_amount);
+        if (updates.order_status) cleanUpdates.order_status = updates.order_status;
+        if (updates.payment_status) cleanUpdates.payment_status = updates.payment_status;
+        await supabase.from('orders').update(cleanUpdates).eq('id', id);
+      } catch (_) {}
+    }
+
+    await logAuditEvent({
+      req,
+      action: 'UPDATE_ORDER',
+      module: 'orders',
+      record_ref: id,
+      details: `Updated order #${ord.order_number || id} details`,
+      old_value: { order_number: prevOrder.order_number, total_amount: prevOrder.total_amount, delivery_date: prevOrder.delivery_date, status: prevOrder.order_status },
+      new_value: { total_amount: ord.total_amount, delivery_date: ord.delivery_date, status: ord.order_status, notes: ord.notes },
+    });
+
+    return res.json({ success: true, order: ord });
   } catch (err: any) {
     return res.status(500).json({ message: err.message });
   }
@@ -1786,7 +2193,7 @@ apiRouter.post('/deliveries/create-for-order', async (req: Request, res: Respons
         // Check if a delivery already exists for this order
         const { data: existingDel } = await supabase
           .from('deliveries')
-          .select('id, status')
+          .select('id, status, delivery_number')
           .eq('order_id', params.order_id)
           .maybeSingle();
 
@@ -1808,6 +2215,17 @@ apiRouter.post('/deliveries/create-for-order', async (req: Request, res: Respons
 
           const payload = { id: existingDel.id, updated: true, order_id: params.order_id };
           if (idempotencyKey) saveIdempotencyRecord(idempotencyKey, 'dispatch_order', payload);
+
+          const delNum = (existingDel as any).delivery_number || existingDel.id;
+          await logAuditEvent({
+            req,
+            action: 'DISPATCH_ORDER',
+            module: 'deliveries',
+            record_ref: existingDel.id,
+            details: `Dispatched delivery #${delNum} for order #${params.order_id} to driver "${params.driver_id || 'Fleet Driver'}" (${params.vehicle || 'Van #1'})`,
+            new_value: { driver_id: params.driver_id, vehicle: params.vehicle || 'Van #1', status: 'assigned' },
+          });
+
           return res.status(200).json(payload);
         }
 
@@ -1839,6 +2257,16 @@ apiRouter.post('/deliveries/create-for-order', async (req: Request, res: Respons
 
         const payload = { id, created: true, order_id: params.order_id };
         if (idempotencyKey) saveIdempotencyRecord(idempotencyKey, 'dispatch_order', payload);
+
+        await logAuditEvent({
+          req,
+          action: 'DISPATCH_ORDER',
+          module: 'deliveries',
+          record_ref: id,
+          details: `Dispatched delivery #${deliveryNumber} for order #${params.order_id} to driver "${params.driver_id || 'Fleet Driver'}" (${params.vehicle || 'Van #1'})`,
+          new_value: { delivery_number: deliveryNumber, driver_id: params.driver_id, vehicle: params.vehicle || 'Van #1', status: 'assigned' },
+        });
+
         return res.status(201).json(payload);
       }
 
@@ -1862,6 +2290,16 @@ apiRouter.post('/deliveries/create-for-order', async (req: Request, res: Respons
         }
         const payload = { id: existingDel.id, updated: true };
         if (idempotencyKey) saveIdempotencyRecord(idempotencyKey, 'dispatch_order', payload);
+
+        await logAuditEvent({
+          req,
+          action: 'ASSIGN_DELIVERY',
+          module: 'deliveries',
+          record_ref: existingDel.id,
+          details: `Reassigned delivery #${existingDel.delivery_number} for order #${ord?.order_number || params.order_id} to driver "${params.driver_id || 'Fleet Driver'}" (${params.vehicle || 'Van #1'})`,
+          new_value: { driver_id: params.driver_id, vehicle: params.vehicle },
+        });
+
         return res.status(200).json(payload);
       }
 
@@ -1887,6 +2325,16 @@ apiRouter.post('/deliveries/create-for-order', async (req: Request, res: Respons
 
       const payload = { id, created: true };
       if (idempotencyKey) saveIdempotencyRecord(idempotencyKey, 'dispatch_order', payload);
+
+      await logAuditEvent({
+        req,
+        action: 'ASSIGN_DELIVERY',
+        module: 'deliveries',
+        record_ref: id,
+        details: `Assigned delivery #${deliveryNumber} for order #${ord?.order_number || params.order_id} to driver "${params.driver_id || 'Fleet Driver'}" (${params.vehicle || 'Van #1'})`,
+        new_value: { delivery_number: deliveryNumber, driver_id: params.driver_id, vehicle: params.vehicle },
+      });
+
       return res.status(201).json(payload);
     });
   } catch (err: any) {
@@ -2188,6 +2636,16 @@ apiRouter.post('/deliveries/:id/complete', async (req: Request, res: Response) =
         saveIdempotencyRecord(idempotencyKey, 'complete_delivery', resultPayload);
       }
 
+      await logAuditEvent({
+        req,
+        action: 'COMPLETE_DELIVERY',
+        module: 'deliveries',
+        record_ref: id,
+        details: `Completed delivery #${localDel?.delivery_number || id} | Returned cans: ${emptyCans} | Cash collected: PKR ${paymentCollected}`,
+        old_value: { status: 'out_for_delivery' },
+        new_value: { status: 'delivered', empty_cans_returned: emptyCans, payment_collected: paymentCollected, payment_method: paymentMethod },
+      });
+
       return res.json(resultPayload);
     });
   } catch (err: any) {
@@ -2236,6 +2694,7 @@ apiRouter.put('/deliveries/:id/status', async (req: Request, res: Response) => {
 
       const db = loadDatabase();
       const del = db.deliveries.find(d => d.id === id);
+      const prevDelStatus = del?.status || 'assigned';
       if (del) {
         if (del.status === 'delivered') {
           return res.json({ success: true, unchanged: true, status: 'delivered' });
@@ -2245,6 +2704,22 @@ apiRouter.put('/deliveries/:id/status', async (req: Request, res: Response) => {
         saveDatabase(db);
       }
 
+      let delAction = 'UPDATE_DELIVERY';
+      if (status === 'out_for_delivery') delAction = 'DISPATCH_DELIVERY';
+      else if (status === 'delivered') delAction = 'COMPLETE_DELIVERY';
+      else if (status === 'failed') delAction = 'FAILED_DELIVERY';
+      else if (status === 'cancelled') delAction = 'CANCEL_DELIVERY';
+
+      await logAuditEvent({
+        req,
+        action: delAction,
+        module: 'deliveries',
+        record_ref: id,
+        details: `Delivery #${del?.delivery_number || id} status updated: ${prevDelStatus} → ${status}${failure_reason ? ` (Reason: ${failure_reason})` : ''}`,
+        old_value: { status: prevDelStatus },
+        new_value: { status, failure_reason },
+      });
+
       return res.json({ success: true });
     });
   } catch (err: any) {
@@ -2253,68 +2728,482 @@ apiRouter.put('/deliveries/:id/status', async (req: Request, res: Response) => {
 });
 
 // -----------------------------------------------------------------------------
-// 10. EMPTY CAN RECONCILIATION
+// 10. EMPTY CAN & PHYSICAL ASSET RECONCILIATION
 // -----------------------------------------------------------------------------
 
-apiRouter.get('/cans/summary', (req: Request, res: Response) => {
-  const db = loadDatabase();
-  const invList = db.inventory;
-
-  const emptyInWarehouse = invList.reduce((s, i) => s + (Number(i.empty_cans) || 0), 0);
-  const filledInWarehouse = invList.reduce((s, i) => s + (Number(i.filled_stock) || 0), 0);
-  const withCustomers = db.customers.reduce((s, c) => s + (Number(c.cans_held) || 0), 0);
-  const damagedCans = invList.reduce((s, i) => s + (Number(i.damaged_cans) || 0), 0);
-  const lostCans = invList.reduce((s, i) => s + (Number(i.lost_cans) || 0), 0);
-  const totalCompanyCans = emptyInWarehouse + filledInWarehouse + withCustomers + damagedCans + lostCans;
-
-  const customerRankings = db.customers.slice().sort((a, b) => (b.cans_held || 0) - (a.cans_held || 0));
-
-  return res.json({
-    metrics: {
-      emptyInWarehouse,
-      filledInWarehouse,
-      withCustomers,
-      damagedCans,
-      lostCans,
-      totalCompanyCans,
-    },
-    customerRankings,
-    recentCanMovements: db.customer_can_movements.slice(0, 50),
-    totalCirculation: totalCompanyCans,
-    customerHeld: withCustomers,
-    factoryEmpty: emptyInWarehouse,
-    factoryFilled: filledInWarehouse,
-    damagedCount: damagedCans,
-    lostCount: lostCans,
-  });
-});
-
-apiRouter.post('/cans/adjust-customer', async (req: Request, res: Response) => {
+apiRouter.get('/cans/summary', async (req: Request, res: Response) => {
   try {
-    const { customer_id, quantity, movement_type, reason } = req.body;
     const db = loadDatabase();
-    const cust = db.customers.find(c => c.id === customer_id);
+    const supabase = getServerSupabase();
 
-    if (cust) {
-      const delta = movement_type === 'issued' ? Number(quantity) : -Number(quantity);
-      cust.cans_held = Math.max(0, (cust.cans_held || 0) + delta);
+    let customers = db.customers || [];
+    let movements: any[] = db.customer_can_movements || [];
 
-      db.customer_can_movements.unshift({
-        id: `ccm-${Date.now()}`,
-        customer_id,
-        product_id: 'prod-19l-can',
-        movement_type,
-        quantity: Number(quantity),
-        balance_after: cust.cans_held,
-        reason: reason || 'Manual adjustment',
-        created_at: new Date().toISOString(),
-      });
-      saveDatabase(db);
+    if (supabase) {
+      try {
+        const [invRes, custRes, movRes] = await Promise.all([
+          supabase.from('inventory').select('*').eq('product_id', 'prod-19l-can').maybeSingle(),
+          supabase.from('customers').select('*').order('cans_held', { ascending: false }),
+          supabase.from('customer_can_movements').select('*').order('created_at', { ascending: false }).limit(60),
+        ]);
+
+        if (invRes.data) {
+          const supInv = invRes.data;
+          let localInv = db.inventory.find(i => i.product_id === 'prod-19l-can');
+          if (!localInv) {
+            const prod = db.products.find(p => p.id === 'prod-19l-can');
+            localInv = {
+              id: supInv.id || 'inv-19l',
+              product_id: 'prod-19l-can',
+              product_name: prod?.name || 'AAB E ARWA 19L Premium Water Can',
+              size: prod?.size || '19L',
+              unit: prod?.unit || 'bottle',
+              selling_price: prod?.selling_price || 220,
+              cost_price: prod?.cost_price || 95,
+              is_reusable: 1,
+              filled_stock: Number(supInv.filled_stock || 0),
+              empty_cans: Number(supInv.empty_cans || 0),
+              damaged_cans: Number(supInv.damaged_cans || 0),
+              lost_cans: Number(supInv.lost_cans || 0),
+              updated_at: supInv.updated_at || new Date().toISOString(),
+            };
+            db.inventory.push(localInv);
+          } else {
+            localInv.filled_stock = Number(supInv.filled_stock || 0);
+            localInv.empty_cans = Number(supInv.empty_cans || 0);
+            localInv.damaged_cans = Number(supInv.damaged_cans || 0);
+            localInv.lost_cans = Number(supInv.lost_cans || 0);
+          }
+        }
+
+        if (custRes.data && custRes.data.length > 0) {
+          customers = custRes.data;
+          for (const sc of customers) {
+            const lc = db.customers.find(c => c.id === sc.id);
+            if (lc) lc.cans_held = Number(sc.cans_held || 0);
+          }
+        }
+
+        if (movRes.data && movRes.data.length > 0) {
+          // Merge movements by ID preserving any rich local notes
+          const movMap = new Map<string, any>();
+          for (const m of (db.customer_can_movements || [])) {
+            if (m.id) movMap.set(m.id, m);
+          }
+          for (const sm of movRes.data) {
+            if (sm.id) {
+              movMap.set(sm.id, {
+                ...movMap.get(sm.id),
+                ...sm,
+              });
+            }
+          }
+          movements = Array.from(movMap.values());
+          db.customer_can_movements = movements.slice(0, 100);
+        }
+        saveDatabase(db);
+      } catch (err: any) {
+        console.warn('[API /cans/summary] Supabase sync notice:', err?.message || err);
+      }
     }
 
-    return res.json({ success: true });
+    const inv19 = db.inventory.find(i => i.product_id === 'prod-19l-can');
+    const emptyInWarehouse = Number(inv19?.empty_cans || 0);
+    const filledInWarehouse = Number(inv19?.filled_stock || 0);
+    const withCustomers = customers.reduce((s, c) => s + (Number(c.cans_held) || 0), 0);
+    const damagedCans = Number(inv19?.damaged_cans || 0);
+    const lostCans = Number(inv19?.lost_cans || 0);
+
+    // Reconciled Total Company Cans:
+    // Filled in Plant + Empty in Plant + With Customers + Damaged + Lost/Unreturned
+    const totalCompanyCans = emptyInWarehouse + filledInWarehouse + withCustomers + damagedCans + lostCans;
+
+    const customerRankings = customers.slice().sort((a, b) => (Number(b.cans_held) || 0) - (Number(a.cans_held) || 0));
+
+    // Map movements with readable customer names and format
+    const customerMap = new Map(customers.map(c => [c.id, c.name]));
+    const mappedMovements = movements.map(m => {
+      let custName = m.customer_name || customerMap.get(m.customer_id);
+      if (!custName) {
+        custName = m.customer_id === 'company-asset-pool' ? 'Company Physical Asset Pool' : 'Valued Customer';
+      }
+      return {
+        ...m,
+        customer_name: custName,
+      };
+    });
+
+    mappedMovements.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    return res.json({
+      metrics: {
+        emptyInWarehouse,
+        filledInWarehouse,
+        withCustomers,
+        damagedCans,
+        lostCans,
+        totalCompanyCans,
+      },
+      customerRankings,
+      recentCanMovements: mappedMovements.slice(0, 50),
+      totalCirculation: totalCompanyCans,
+      customerHeld: withCustomers,
+      factoryEmpty: emptyInWarehouse,
+      factoryFilled: filledInWarehouse,
+      damagedCount: damagedCans,
+      lostCount: lostCans,
+    });
   } catch (err: any) {
-    return res.status(500).json({ message: err.message });
+    console.error('[API /cans/summary] Error:', err);
+    return res.status(500).json({ message: err.message || 'Failed to load can summary' });
+  }
+});
+
+// 1. Total Company Cans Adjustment Endpoint
+apiRouter.post('/cans/adjust-company', async (req: Request, res: Response) => {
+  try {
+    const authorized = await authorizePermission(req, res, 'cans', 'can_edit');
+    if (!authorized) return;
+
+    const {
+      adjustment_mode = 'set_total',
+      target_total,
+      delta,
+      empty_cans,
+      damaged_cans,
+      lost_cans,
+      reason,
+      notes,
+    } = req.body;
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ message: 'Mandatory audit reason is required for company can adjustment' });
+    }
+
+    const authUser = await getAuthUserFromRequest(req);
+    const db = loadDatabase();
+    const fallbackOwner = db.users.find(u => u.role_name === 'Owner' || u.role_id === 'role-owner');
+    const operatorName = authUser?.name || fallbackOwner?.name || 'Owner Operator';
+
+    const supabase = getServerSupabase();
+    let inv19 = db.inventory.find(i => i.product_id === 'prod-19l-can');
+    if (!inv19) {
+      const prod = db.products.find(p => p.id === 'prod-19l-can');
+      inv19 = {
+        id: 'inv-19l',
+        product_id: 'prod-19l-can',
+        product_name: prod?.name || 'AAB E ARWA 19L Premium Water Can',
+        size: prod?.size || '19L',
+        unit: prod?.unit || 'bottle',
+        selling_price: prod?.selling_price || 220,
+        cost_price: prod?.cost_price || 95,
+        is_reusable: 1,
+        filled_stock: 0,
+        empty_cans: 0,
+        damaged_cans: 0,
+        lost_cans: 0,
+        updated_at: new Date().toISOString(),
+      };
+      db.inventory.push(inv19);
+    }
+    const safeInv19 = inv19!;
+
+    // Reconciled counts:
+    // Product filled stock is finished goods and remains separate & untouched!
+    const filledInWarehouse = Number(safeInv19.filled_stock || 0);
+    const withCustomers = db.customers.reduce((s, c) => s + (Number(c.cans_held) || 0), 0);
+    const currentEmpty = Number(safeInv19.empty_cans || 0);
+    const currentDamaged = Number(safeInv19.damaged_cans || 0);
+    const currentLost = Number(safeInv19.lost_cans || 0);
+    const previousTotal = filledInWarehouse + currentEmpty + withCustomers + currentDamaged + currentLost;
+
+    let newEmpty = currentEmpty;
+    let newDamaged = currentDamaged;
+    let newLost = currentLost;
+
+    if (adjustment_mode === 'set_total') {
+      const target = Number(target_total);
+      if (isNaN(target) || target < 0) {
+        return res.status(400).json({ message: 'Valid non-negative target total is required' });
+      }
+      const otherCans = filledInWarehouse + withCustomers + currentDamaged + currentLost;
+      if (target < otherCans) {
+        return res.status(400).json({
+          message: `Target total (${target}) cannot be lower than currently accounted cans (${otherCans}): ${filledInWarehouse} filled in plant + ${withCustomers} with customers + ${currentDamaged} damaged + ${currentLost} lost.`,
+        });
+      }
+      newEmpty = target - otherCans;
+    } else if (adjustment_mode === 'delta') {
+      const d = Number(delta);
+      if (isNaN(d) || d === 0) {
+        return res.status(400).json({ message: 'Valid non-zero adjustment delta is required' });
+      }
+      newEmpty = Math.max(0, currentEmpty + d);
+    } else if (adjustment_mode === 'set_breakdown') {
+      if (empty_cans !== undefined) newEmpty = Math.max(0, Number(empty_cans));
+      if (damaged_cans !== undefined) newDamaged = Math.max(0, Number(damaged_cans));
+      if (lost_cans !== undefined) newLost = Math.max(0, Number(lost_cans));
+    }
+
+    const newTotal = filledInWarehouse + newEmpty + withCustomers + newDamaged + newLost;
+    const totalDelta = newTotal - previousTotal;
+    const nowIso = new Date().toISOString();
+
+    // 1. Update local database
+    safeInv19.empty_cans = newEmpty;
+    safeInv19.damaged_cans = newDamaged;
+    safeInv19.lost_cans = newLost;
+    safeInv19.updated_at = nowIso;
+
+    // Movement entry for unified history
+    const movementId = `canmov-${Date.now()}-co`;
+    db.customer_can_movements.unshift({
+      id: movementId,
+      customer_id: 'company-asset-pool',
+      customer_name: 'Company Physical Asset Pool',
+      product_id: 'prod-19l-can',
+      movement_type: totalDelta >= 0 ? 'company_cans_addition' : 'company_cans_reduction',
+      quantity: totalDelta,
+      balance_after: newTotal,
+      reason: reason.trim(),
+      notes: notes?.trim() || '',
+      user_name: operatorName,
+      user_id: authUser?.id || undefined,
+      created_at: nowIso,
+    });
+    saveDatabase(db);
+
+    // 2. Persist in Supabase inventory & inventory_movements
+    if (supabase) {
+      try {
+        await supabase
+          .from('inventory')
+          .update({
+            empty_cans: newEmpty,
+            damaged_cans: newDamaged,
+            lost_cans: newLost,
+            updated_at: nowIso,
+          })
+          .eq('product_id', 'prod-19l-can');
+
+        await supabase.from('inventory_movements').insert({
+          id: `mov-${Date.now()}`,
+          product_id: 'prod-19l-can',
+          movement_type: totalDelta >= 0 ? 'company_cans_addition' : 'company_cans_reduction',
+          stock_type: 'empty',
+          quantity: totalDelta,
+          previous_stock: previousTotal,
+          new_stock: newTotal,
+          reason: `${reason.trim()}${notes ? ` | Note: ${notes.trim()}` : ''}`,
+          reference_type: 'company_asset_adjustment',
+          user_id: operatorName,
+          created_at: nowIso,
+        });
+      } catch (err: any) {
+        console.warn('[API /cans/adjust-company] Supabase update notice:', err?.message || err);
+      }
+    }
+
+    // 3. Create mandatory Audit Trail record
+    await logAuditEvent({
+      req,
+      action: 'ADJUST_COMPANY_CANS',
+      module: 'cans',
+      record_ref: 'prod-19l-can',
+      details: `Total company physical 19L cans adjusted: ${previousTotal} → ${newTotal} (${totalDelta >= 0 ? '+' : ''}${totalDelta}) [Empty in Plant: ${newEmpty}, Filled in Plant: ${filledInWarehouse}, With Customers: ${withCustomers}, Damaged: ${newDamaged}, Lost: ${newLost}] | Reason: ${reason.trim()}${notes ? ` | Note: ${notes.trim()}` : ''}`,
+      old_value: {
+        total_company_cans: previousTotal,
+        empty_in_plant: currentEmpty,
+        filled_stock: filledInWarehouse,
+        with_customers: withCustomers,
+        damaged_cans: currentDamaged,
+        lost_cans: currentLost,
+      },
+      new_value: {
+        total_company_cans: newTotal,
+        empty_in_plant: newEmpty,
+        filled_stock: filledInWarehouse,
+        with_customers: withCustomers,
+        damaged_cans: newDamaged,
+        lost_cans: newLost,
+        delta: totalDelta,
+        reason: reason.trim(),
+        notes: notes?.trim() || null,
+      },
+    });
+
+    console.log(`[CANS] Total Company Cans adjusted: ${previousTotal} -> ${newTotal} by ${operatorName}`);
+
+    return res.json({
+      success: true,
+      previous_total: previousTotal,
+      new_total: newTotal,
+      delta: totalDelta,
+      metrics: {
+        emptyInWarehouse: newEmpty,
+        filledInWarehouse,
+        withCustomers,
+        damagedCans: newDamaged,
+        lostCans: newLost,
+        totalCompanyCans: newTotal,
+      },
+    });
+  } catch (err: any) {
+    console.error('[API /cans/adjust-company] Exception:', err);
+    return res.status(500).json({ message: err.message || 'Internal server error adjusting company cans' });
+  }
+});
+
+// 2. Customer Cans Adjustment Endpoint
+apiRouter.post('/cans/adjust-customer', async (req: Request, res: Response) => {
+  try {
+    const authorized = await authorizePermission(req, res, 'cans', 'can_edit');
+    if (!authorized) return;
+
+    const { customer_id, change_type = 'issue_more', quantity, reason, notes } = req.body;
+    if (!customer_id) {
+      return res.status(400).json({ message: 'Customer selection is required' });
+    }
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ message: 'Mandatory audit reason is required for can adjustment' });
+    }
+
+    const qty = Number(quantity);
+    if (isNaN(qty) || qty < 0) {
+      return res.status(400).json({ message: 'Valid non-negative quantity required' });
+    }
+
+    const authUser = await getAuthUserFromRequest(req);
+    const db = loadDatabase();
+    const fallbackOwner = db.users.find(u => u.role_name === 'Owner' || u.role_id === 'role-owner');
+    const operatorName = authUser?.name || fallbackOwner?.name || 'Staff Operator';
+
+    const cust = db.customers.find(c => c.id === customer_id);
+    if (!cust) {
+      return res.status(404).json({ message: 'Customer record not found' });
+    }
+
+    const prevCans = Number(cust.cans_held || 0);
+    let newCans = prevCans;
+    let delta = 0;
+
+    if (change_type === 'issue_more') {
+      delta = qty;
+      newCans = prevCans + delta;
+    } else if (change_type === 'return_cans') {
+      delta = -Math.min(prevCans, qty);
+      newCans = Math.max(0, prevCans - qty);
+    } else if (change_type === 'set_balance') {
+      newCans = qty;
+      delta = newCans - prevCans;
+    } else if (change_type === 'report_damaged' || change_type === 'report_lost') {
+      delta = -Math.min(prevCans, qty);
+      newCans = Math.max(0, prevCans - qty);
+    }
+
+    const nowIso = new Date().toISOString();
+    cust.cans_held = newCans;
+    cust.updated_at = nowIso;
+
+    // Adjust plant empty / damaged / lost count accordingly to preserve total physical count:
+    const inv19 = db.inventory.find(i => i.product_id === 'prod-19l-can');
+    if (inv19) {
+      if (change_type === 'return_cans') {
+        inv19.empty_cans = Math.max(0, (Number(inv19.empty_cans) || 0) + Math.abs(delta));
+      } else if (change_type === 'report_damaged') {
+        inv19.damaged_cans = Math.max(0, (Number(inv19.damaged_cans) || 0) + Math.abs(delta));
+      } else if (change_type === 'report_lost') {
+        inv19.lost_cans = Math.max(0, (Number(inv19.lost_cans) || 0) + Math.abs(delta));
+      } else if (change_type === 'issue_more' && (Number(inv19.empty_cans) || 0) >= delta) {
+        inv19.empty_cans = Math.max(0, (Number(inv19.empty_cans) || 0) - delta);
+      }
+    }
+
+    const movementId = `canmov-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const movementRecord = {
+      id: movementId,
+      customer_id,
+      customer_name: cust.name,
+      product_id: 'prod-19l-can',
+      movement_type: change_type,
+      quantity: delta,
+      balance_after: newCans,
+      reason: reason.trim(),
+      notes: notes?.trim() || '',
+      user_id: authUser?.id || undefined,
+      user_name: operatorName,
+      created_at: nowIso,
+    };
+    db.customer_can_movements.unshift(movementRecord);
+    saveDatabase(db);
+
+    // Persist in Supabase
+    const supabase = getServerSupabase();
+    if (supabase) {
+      try {
+        await supabase
+          .from('customers')
+          .update({ cans_held: newCans, updated_at: nowIso })
+          .eq('id', customer_id);
+
+        if (inv19) {
+          await supabase
+            .from('inventory')
+            .update({
+              empty_cans: inv19.empty_cans,
+              damaged_cans: inv19.damaged_cans,
+              lost_cans: inv19.lost_cans,
+              updated_at: nowIso,
+            })
+            .eq('product_id', 'prod-19l-can');
+        }
+
+        await supabase.from('customer_can_movements').insert({
+          id: movementId,
+          customer_id,
+          product_id: 'prod-19l-can',
+          movement_type: change_type,
+          quantity: delta,
+          balance_after: newCans,
+          reason: `${reason.trim()}${notes ? ` | Note: ${notes.trim()}` : ''}`,
+          user_id: authUser?.id || null,
+          created_at: nowIso,
+        });
+      } catch (err: any) {
+        console.warn('[API /cans/adjust-customer] Supabase sync notice:', err?.message || err);
+      }
+    }
+
+    // Create mandatory Audit Trail record
+    await logAuditEvent({
+      req,
+      action: 'ADJUST_CUSTOMER_CANS',
+      module: 'cans',
+      record_ref: customer_id,
+      details: `Customer cans adjusted for "${cust.name}" (${cust.area}): ${change_type} (${delta >= 0 ? '+' : ''}${delta}) | Balance: ${prevCans} → ${newCans} cans | Reason: ${reason.trim()}${notes ? ` | Note: ${notes.trim()}` : ''}`,
+      old_value: { cans_held: prevCans },
+      new_value: {
+        cans_held: newCans,
+        change_type,
+        delta,
+        reason: reason.trim(),
+        notes: notes?.trim() || null,
+      },
+    });
+
+    console.log(`[CANS] Customer cans adjusted for ${cust.name}: ${prevCans} -> ${newCans} (${delta})`);
+
+    return res.json({
+      success: true,
+      customer_id,
+      customer_name: cust.name,
+      previous_balance: prevCans,
+      new_balance: newCans,
+      delta,
+    });
+  } catch (err: any) {
+    console.error('[API /cans/adjust-customer] Exception:', err);
+    return res.status(500).json({ message: err.message || 'Internal server error adjusting customer cans' });
   }
 });
 
@@ -2439,7 +3328,100 @@ apiRouter.post('/payments', async (req: Request, res: Response) => {
     }
 
     saveDatabase(db);
+
+    await logAuditEvent({
+      req,
+      action: 'CREATE_PAYMENT',
+      module: 'payments',
+      record_ref: id,
+      details: `Recorded payment receipt #${newPayment.payment_number} of PKR ${newPayment.amount} for customer "${cust?.name || pay.customer_id}" (${newPayment.payment_method})`,
+      new_value: { payment_number: newPayment.payment_number, amount: newPayment.amount, method: newPayment.payment_method, customer_id: pay.customer_id, payment_date: newPayment.payment_date },
+    });
+
     return res.status(201).json({ id });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+apiRouter.put('/payments/:id', async (req: Request, res: Response) => {
+  try {
+    const authorized = await authorizePermission(req, res, 'payments', 'can_edit');
+    if (!authorized) return;
+
+    const { id } = req.params;
+    const db = loadDatabase();
+    const pay = db.payments.find(p => p.id === id);
+    if (!pay) {
+      return res.status(404).json({ message: 'Payment record not found' });
+    }
+
+    const prevPay = { ...pay };
+    Object.assign(pay, req.body);
+    saveDatabase(db);
+
+    const supabase = getServerSupabase();
+    if (supabase) {
+      try {
+        await supabase.from('payments').update(req.body).eq('id', id);
+      } catch (_) {}
+    }
+
+    await logAuditEvent({
+      req,
+      action: 'UPDATE_PAYMENT',
+      module: 'payments',
+      record_ref: id,
+      details: `Updated payment receipt #${pay.payment_number}`,
+      old_value: prevPay,
+      new_value: pay,
+    });
+
+    return res.json({ success: true, payment: pay });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+apiRouter.delete('/payments/:id', async (req: Request, res: Response) => {
+  try {
+    const authorized = await authorizePermission(req, res, 'payments', 'can_delete');
+    if (!authorized) return;
+
+    const { id } = req.params;
+    const db = loadDatabase();
+    const pay = db.payments.find(p => p.id === id);
+    if (!pay) {
+      return res.status(404).json({ message: 'Payment record not found' });
+    }
+
+    if (pay.customer_id) {
+      const cust = db.customers.find(c => c.id === pay.customer_id);
+      if (cust) {
+        cust.outstanding_balance = (cust.outstanding_balance || 0) + (pay.amount || 0);
+      }
+    }
+
+    db.payments = db.payments.filter(p => p.id !== id);
+    saveDatabase(db);
+
+    const supabase = getServerSupabase();
+    if (supabase) {
+      try {
+        await supabase.from('payments').delete().eq('id', id);
+      } catch (_) {}
+    }
+
+    await logAuditEvent({
+      req,
+      action: 'DELETE_PAYMENT',
+      module: 'payments',
+      record_ref: id,
+      details: `Deleted payment receipt #${pay.payment_number} (PKR ${pay.amount})`,
+      old_value: { id, payment_number: pay.payment_number, amount: pay.amount },
+    });
+
+    return res.json({ success: true });
   } catch (err: any) {
     return res.status(500).json({ message: err.message });
   }
@@ -3023,10 +4005,106 @@ apiRouter.get('/dashboard/summary', async (req: Request, res: Response) => {
 });
 
 apiRouter.get('/audit-logs', async (req: Request, res: Response) => {
-  const authorized = await authorizePermission(req, res, 'audit', 'can_view');
-  if (!authorized) return;
-  const db = loadDatabase();
-  return res.json(db.audit_logs);
+  try {
+    const authUser = await getAuthUserFromRequest(req);
+    const db = loadDatabase();
+    const fallbackOwner = db.users.find(u => u.role_name === 'Owner' || u.role_id === 'role-owner');
+    const currentUser = authUser || fallbackOwner;
+
+    // Security check: strictly Owner-only. Managers and Delivery Boys are blocked.
+    if (!currentUser || (currentUser.role_name !== 'Owner' && currentUser.role_id !== 'role-owner')) {
+      return res.status(403).json({
+        message: 'Access Denied: System Audit Trail is restricted exclusively to the business Owner.',
+      });
+    }
+
+    let supabaseLogs: AuditLog[] = [];
+    const authHeader = req.headers.authorization;
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
+    const supabaseKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+
+    // 1. Fetch from Supabase using user's authenticated bearer token if present
+    if (authHeader && authHeader.startsWith('Bearer ') && supabaseUrl && supabaseKey) {
+      try {
+        const userSupabase = createClient(supabaseUrl, supabaseKey, {
+          global: { headers: { Authorization: authHeader } },
+          auth: { persistSession: false },
+        });
+        const { data, error } = await userSupabase
+          .from('audit_logs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(300);
+
+        if (!error && data) {
+          supabaseLogs = data as AuditLog[];
+        }
+      } catch (err: any) {
+        console.warn('[API /audit-logs] User Supabase query notice:', err?.message || err);
+      }
+    }
+
+    // 2. Fallback to serverSupabase if user query didn't return data
+    if (supabaseLogs.length === 0) {
+      const serverSupabase = getServerSupabase();
+      if (serverSupabase) {
+        try {
+          const { data, error } = await serverSupabase
+            .from('audit_logs')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(300);
+
+          if (!error && data) {
+            supabaseLogs = data as AuditLog[];
+          }
+        } catch (_) {}
+      }
+    }
+
+    // 3. Merge and deduplicate by unique record ID
+    const logMap = new Map<string, AuditLog>();
+    for (const log of (db.audit_logs || [])) {
+      if (log && log.id) logMap.set(log.id, log);
+    }
+    for (const log of supabaseLogs) {
+      if (log && log.id) {
+        logMap.set(log.id, {
+          ...logMap.get(log.id),
+          ...log,
+        });
+      }
+    }
+
+    let mergedLogs = Array.from(logMap.values());
+    // Keep local cache synced
+    db.audit_logs = mergedLogs.slice(0, 1000);
+    saveDatabase(db);
+
+    // 4. Filter by module or search query
+    const search = (req.query.search as string || '').toLowerCase().trim();
+    const moduleFilter = (req.query.module as string || '').toLowerCase().trim();
+
+    if (moduleFilter) {
+      mergedLogs = mergedLogs.filter(l => (l.module || '').toLowerCase() === moduleFilter);
+    }
+    if (search) {
+      mergedLogs = mergedLogs.filter(l =>
+        (l.user_name && l.user_name.toLowerCase().includes(search)) ||
+        (l.details && l.details.toLowerCase().includes(search)) ||
+        (l.action && l.action.toLowerCase().includes(search)) ||
+        (l.record_ref && l.record_ref.toLowerCase().includes(search)) ||
+        (l.user_role && l.user_role.toLowerCase().includes(search))
+      );
+    }
+
+    // Newest records first
+    mergedLogs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return res.json(mergedLogs);
+  } catch (err: any) {
+    console.error('[API /audit-logs] Exception:', err?.message || err);
+    return res.status(500).json({ message: err.message || 'Internal server error fetching audit logs' });
+  }
 });
 
 apiRouter.get('/settings', async (req: Request, res: Response) => {
@@ -3037,10 +4115,36 @@ apiRouter.get('/settings', async (req: Request, res: Response) => {
 });
 
 apiRouter.put('/settings', async (req: Request, res: Response) => {
-  const authorized = await authorizePermission(req, res, 'settings', 'can_edit');
-  if (!authorized) return;
-  const db = loadDatabase();
-  db.settings = { ...db.settings, ...req.body };
-  saveDatabase(db);
-  return res.json({ success: true, settings: db.settings });
+  try {
+    const authorized = await authorizePermission(req, res, 'settings', 'can_edit');
+    if (!authorized) return;
+
+    const db = loadDatabase();
+    const prevSettings = { ...db.settings };
+    db.settings = { ...db.settings, ...req.body };
+    saveDatabase(db);
+
+    const supabase = getServerSupabase();
+    if (supabase) {
+      try {
+        for (const [key, value] of Object.entries(req.body)) {
+          await supabase.from('settings').upsert({ key, value: String(value), updated_at: new Date().toISOString() });
+        }
+      } catch (_) {}
+    }
+
+    await logAuditEvent({
+      req,
+      action: 'UPDATE_SETTINGS',
+      module: 'settings',
+      record_ref: 'system-settings',
+      details: `Updated system settings: ${Object.keys(req.body).join(', ')}`,
+      old_value: prevSettings,
+      new_value: db.settings,
+    });
+
+    return res.json({ success: true, settings: db.settings });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message });
+  }
 });

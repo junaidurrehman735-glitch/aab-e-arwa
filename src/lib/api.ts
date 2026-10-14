@@ -218,6 +218,10 @@ async function handleSupabaseRoute<T>(method: string, endpoint: string, body?: a
       await SupabaseDataService.adjustCustomerCans(body);
       return { success: true } as unknown as T;
     }
+    if (pathParts[1] === 'adjust-company' && method === 'POST') {
+      await SupabaseDataService.adjustCompanyCans(body);
+      return { success: true } as unknown as T;
+    }
   }
 
   // 11. PAYMENTS

@@ -702,6 +702,7 @@ CREATE POLICY "anon_expenses_access" ON public.expenses FOR ALL TO anon USING (t
 CREATE POLICY "anon_expense_categories_access" ON public.expense_categories FOR SELECT TO anon USING (true);
 CREATE POLICY "anon_payments_access" ON public.payments FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "anon_ledger_access" ON public.customer_ledger FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_audit_logs_access" ON public.audit_logs FOR ALL TO anon USING (true) WITH CHECK (true);
 
 -- ==============================================================================
 -- 6. PERFORMANCE INDEXES

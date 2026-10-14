@@ -11,7 +11,6 @@ import { DashboardPage } from './pages/DashboardPage.tsx';
 import { CustomersPage } from './pages/CustomersPage.tsx';
 import { ProductsPage } from './pages/ProductsPage.tsx';
 import { InventoryPage } from './pages/InventoryPage.tsx';
-import { ProductionPage } from './pages/ProductionPage.tsx';
 import { OrdersPage } from './pages/OrdersPage.tsx';
 import { DeliveriesPage } from './pages/DeliveriesPage.tsx';
 import { CansPage } from './pages/CansPage.tsx';
@@ -76,7 +75,6 @@ function MainLayout() {
     customers: 'Customer Accounts',
     products: 'Products & Bottle Sizes',
     inventory: 'Stock & Warehouse',
-    production: 'Water Filling / Plant',
     orders: 'Customer Orders',
     deliveries: 'Delivery Logistics & Routes',
     cans: 'Empty Can Asset Reconciliation',
@@ -123,8 +121,6 @@ function MainLayout() {
         return <ProductsPage />;
       case 'inventory':
         return <InventoryPage />;
-      case 'production':
-        return <ProductionPage />;
       case 'orders':
         return <OrdersPage />;
       case 'deliveries':

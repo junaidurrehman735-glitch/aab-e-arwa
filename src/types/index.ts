@@ -106,6 +106,7 @@ export interface Customer {
   delivery_instructions?: string;
   status: 'active' | 'inactive';
   created_at: string;
+  updated_at?: string;
 }
 
 export interface Product {
@@ -236,14 +237,17 @@ export interface CustomerCanMovement {
   id: string;
   customer_id: string;
   customer_name?: string;
-  product_id: string;
+  product_id?: string;
   product_name?: string;
   movement_type: string;
   quantity: number;
   balance_after: number;
   delivery_id?: string;
   reason?: string;
+  notes?: string;
+  user_id?: string;
   user_name?: string;
+  target_type?: 'company' | 'customer';
   created_at: string;
 }
 
@@ -323,10 +327,13 @@ export interface AuditLog {
   id: string;
   user_id?: string;
   user_name?: string;
+  user_role?: string;
   action: string;
   module: string;
   record_ref?: string;
   details: string;
+  old_value?: any;
+  new_value?: any;
   ip_address?: string;
   created_at: string;
 }

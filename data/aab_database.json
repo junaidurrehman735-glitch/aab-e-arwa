@@ -354,16 +354,16 @@
   ],
   "customers": [
     {
-      "id": "cust-1791901105107-gh3k2",
-      "name": "INNOCENT CUSTOMER 1791901105103",
+      "id": "cust-1791989224727-8192d",
+      "name": "Auto Flow Cust 1427 (Verified)",
       "contact_person": "",
-      "phone": "03003029088",
+      "phone": "03003481118",
       "whatsapp": "",
-      "address": "Innocent address",
+      "address": "Plot 45B Street 3, Quetta (Renovated)",
       "area": "Chiltan Scheme Airport Road",
       "area_access": "Specific Area",
       "customer_type_id": "ct-home",
-      "selling_rate": 150,
+      "selling_rate": 240,
       "payment_type": "Cash",
       "cash_status": "Cash on Delivery",
       "credit_limit": 0,
@@ -373,20 +373,20 @@
       "notes": "",
       "delivery_instructions": "",
       "status": "active",
-      "created_at": "2026-10-13T14:18:25.29+00:00",
-      "updated_at": "2026-10-13T14:18:25.385291+00:00"
+      "created_at": "2026-10-14T14:47:04.896+00:00",
+      "updated_at": "2026-10-14T14:47:07.784+00:00"
     },
     {
-      "id": "cust-1791901088268-8agoe",
-      "name": "EDIT TEST USER 1791901088242 (Updated)",
+      "id": "cust-1791989056037-oj23o",
+      "name": "Audit Verification Cust 2046 (Updated)",
       "contact_person": "",
-      "phone": "03009459439",
+      "phone": "03006917528",
       "whatsapp": "",
-      "address": "Updated Address 0",
+      "address": "Renovated House 99, Quetta",
       "area": "Chiltan Scheme Airport Road",
       "area_access": "Specific Area",
       "customer_type_id": "ct-home",
-      "selling_rate": 180,
+      "selling_rate": 260,
       "payment_type": "Cash",
       "cash_status": "Cash on Delivery",
       "credit_limit": 0,
@@ -396,14 +396,106 @@
       "notes": "",
       "delivery_instructions": "",
       "status": "active",
-      "created_at": "2026-10-13T14:18:08.588+00:00",
-      "updated_at": "2026-10-13T14:18:09.05+00:00"
+      "created_at": "2026-10-14T14:44:16.36+00:00",
+      "updated_at": "2026-10-14T14:44:18.878+00:00"
     },
     {
-      "id": "cust-1791901071922-sanik",
-      "name": "NO IDEMP RAPID TEST 1791901071792",
+      "id": "cust-1791988340960-vcf90",
+      "name": "Audit Verification Customer 0890 (Updated)",
       "contact_person": "",
-      "phone": "03001652355",
+      "phone": "03007654321",
+      "whatsapp": "",
+      "address": "Airport Road Plaza 4, Quetta (Renovated)",
+      "area": "Chiltan Scheme Airport Road",
+      "area_access": "Specific Area",
+      "customer_type_id": "ct-home",
+      "selling_rate": 250,
+      "payment_type": "Cash",
+      "cash_status": "Cash on Delivery",
+      "credit_limit": 0,
+      "outstanding_balance": 0,
+      "cans_held": 0,
+      "net_deposit_amount": 0,
+      "notes": "",
+      "delivery_instructions": "",
+      "status": "active",
+      "created_at": "2026-10-14T14:32:21.347+00:00",
+      "updated_at": "2026-10-14T14:32:23.899+00:00"
+    },
+    {
+      "id": "cust-1791988274344-h6p7a",
+      "name": "Audit Test Customer 4252 (Updated)",
+      "contact_person": "",
+      "phone": "03001234567",
+      "whatsapp": "",
+      "address": "Test Street 1, Quetta (Updated)",
+      "area": "Chiltan Scheme Airport Road",
+      "area_access": "Specific Area",
+      "customer_type_id": "ct-home",
+      "selling_rate": 240,
+      "payment_type": "Cash",
+      "cash_status": "Cash on Delivery",
+      "credit_limit": 0,
+      "outstanding_balance": 0,
+      "cans_held": 0,
+      "net_deposit_amount": 0,
+      "notes": "",
+      "delivery_instructions": "",
+      "status": "active",
+      "created_at": "2026-10-14T14:31:15.939+00:00",
+      "updated_at": "2026-10-14T14:31:18.775+00:00"
+    },
+    {
+      "id": "cust-1791905628085-ol3jt",
+      "name": "Junaid Ur rehman",
+      "contact_person": "",
+      "phone": "1234567890",
+      "whatsapp": "",
+      "address": "kh",
+      "area": "Chiltan Scheme Airport Road",
+      "area_access": "Specific Area",
+      "customer_type_id": "ct-home",
+      "selling_rate": 222,
+      "payment_type": "Cash",
+      "cash_status": "Cash on Delivery",
+      "credit_limit": 0,
+      "outstanding_balance": 0,
+      "cans_held": 2,
+      "net_deposit_amount": 0,
+      "notes": "",
+      "delivery_instructions": "",
+      "status": "active",
+      "created_at": "2026-10-13T15:33:52.599+00:00",
+      "updated_at": "2026-10-13T15:33:52.688018+00:00"
+    },
+    {
+      "id": "cust-1791901944676-mrdyd",
+      "name": "jamal kha",
+      "contact_person": "",
+      "phone": "03138941237",
+      "whatsapp": "",
+      "address": "qadeer hospital quetta",
+      "area": "Main Jinnah Road",
+      "area_access": "Specific Area",
+      "customer_type_id": "ct-office",
+      "selling_rate": 135,
+      "payment_type": "Cash",
+      "cash_status": "Cash on Delivery",
+      "credit_limit": 0,
+      "outstanding_balance": 0,
+      "cans_held": 0,
+      "net_deposit_amount": 1500,
+      "notes": "",
+      "delivery_instructions": "",
+      "status": "active",
+      "created_at": "2026-10-13T14:32:33.12+00:00",
+      "updated_at": "2026-10-13T14:32:33.248547+00:00"
+    },
+    {
+      "id": "cust-1791826319726",
+      "name": "THOMASINE M COLEMAN",
+      "contact_person": "",
+      "phone": "0987654321",
       "whatsapp": "",
       "address": "5308 County Road 700",
       "area": "Chiltan Scheme Airport Road",
@@ -414,36 +506,13 @@
       "cash_status": "Cash on Delivery",
       "credit_limit": 0,
       "outstanding_balance": 0,
-      "cans_held": 0,
+      "cans_held": 6,
       "net_deposit_amount": 0,
       "notes": "",
       "delivery_instructions": "",
       "status": "active",
-      "created_at": "2026-10-13T14:17:52.263+00:00",
-      "updated_at": "2026-10-13T14:17:52.371392+00:00"
-    },
-    {
-      "id": "cust-1791901058278-fiqlb",
-      "name": "THOMASINE M COLEMAN TEST 1791901058163",
-      "contact_person": "",
-      "phone": "03005096272",
-      "whatsapp": "",
-      "address": "5308 County Road 700",
-      "area": "Chiltan Scheme Airport Road",
-      "area_access": "Specific Area",
-      "customer_type_id": "ct-home",
-      "selling_rate": 130,
-      "payment_type": "Cash",
-      "cash_status": "Cash on Delivery",
-      "credit_limit": 0,
-      "outstanding_balance": 0,
-      "cans_held": 0,
-      "net_deposit_amount": 0,
-      "notes": "",
-      "delivery_instructions": "",
-      "status": "active",
-      "created_at": "2026-10-13T14:17:38.704+00:00",
-      "updated_at": "2026-10-13T14:17:38.968988+00:00"
+      "created_at": "2026-10-12T17:31:59.726+00:00",
+      "updated_at": "2026-10-14T15:06:30.450Z"
     },
     {
       "id": "cust-1791826319175",
@@ -711,8 +780,8 @@
       "is_active": 1,
       "created_at": "2026-10-11T20:51:24.566804+00:00",
       "updated_at": "2026-10-11T20:51:24.566804+00:00",
-      "filled_stock": 380,
-      "empty_cans": 280
+      "filled_stock": 513,
+      "empty_cans": 286
     },
     {
       "id": "prod-1.5l-bottle",
@@ -747,14 +816,59 @@
     {
       "id": "inv-1791756072022",
       "product_id": "prod-19l-can",
-      "filled_stock": 400,
-      "empty_cans": 1,
+      "filled_stock": 513,
+      "empty_cans": 86,
       "damaged_cans": 0,
       "lost_cans": 0,
-      "updated_at": "2026-10-11T22:01:11.343Z"
+      "updated_at": "2026-10-14T15:06:29.089Z"
     }
   ],
   "inventory_movements": [
+    {
+      "id": "mov-1791989230779",
+      "product_id": "prod-19l-can",
+      "movement_type": "adjustment_increase",
+      "stock_type": "filled",
+      "quantity": 8,
+      "reason": "Verified plant stock check",
+      "created_at": "2026-10-14T14:47:10.468Z"
+    },
+    {
+      "id": "mov-1791989180103",
+      "product_id": "prod-19l-can",
+      "movement_type": "adjustment_increase",
+      "stock_type": "filled",
+      "quantity": 5,
+      "reason": "End of day audit bottling check",
+      "created_at": "2026-10-14T14:46:19.566Z"
+    },
+    {
+      "id": "mov-1791989061069",
+      "product_id": "prod-19l-can",
+      "movement_type": "adjustment_increase",
+      "stock_type": "filled",
+      "quantity": 12,
+      "reason": "Audit verification plant bottling stock QA",
+      "created_at": "2026-10-14T14:44:20.771Z"
+    },
+    {
+      "id": "mov-1791988346524",
+      "product_id": "prod-19l-can",
+      "movement_type": "adjustment_increase",
+      "stock_type": "filled",
+      "quantity": 15,
+      "reason": "Daily plant refilling audit",
+      "created_at": "2026-10-14T14:32:26.205Z"
+    },
+    {
+      "id": "mov-1791988282089",
+      "product_id": "prod-19l-can",
+      "movement_type": "adjustment_increase",
+      "stock_type": "filled",
+      "quantity": 10,
+      "reason": "Batch filling QA check",
+      "created_at": "2026-10-14T14:31:21.722Z"
+    },
     {
       "id": "mov-1791756072022",
       "product_id": "prod-19l-can",
@@ -775,6 +889,358 @@
   ],
   "production_records": [],
   "orders": [
+    {
+      "id": "ord-1791989225912",
+      "order_number": "ORD-225912",
+      "customer_id": "cust-1791989224727-8192d",
+      "total_amount": 480,
+      "payment_type": "Cash",
+      "payment_status": "paid",
+      "order_status": "completed",
+      "delivery_date": "2026-10-14",
+      "delivery_address": "",
+      "notes": "Order verification test",
+      "created_by": "Owner",
+      "created_at": "2026-10-14T14:47:05.912+00:00",
+      "updated_at": "2026-10-14T14:47:07.784+00:00",
+      "customer": {
+        "id": "cust-1791989224727-8192d",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Auto Flow Cust 1427 (Verified)",
+        "phone": "03003481118",
+        "address": "Plot 45B Street 3, Quetta (Renovated)"
+      },
+      "items": [
+        {
+          "id": "item-1791989226016-tqob0",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791989225912",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 240,
+          "total_price": 480,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "Auto Flow Cust 1427 (Verified)",
+      "customer_phone": "03003481118",
+      "customer_area": "Chiltan Scheme Airport Road"
+    },
+    {
+      "id": "ord-1791989135657",
+      "order_number": "ORD-135657",
+      "customer_id": "cust-1791989056037-oj23o",
+      "total_amount": 260,
+      "payment_type": "Cash",
+      "payment_status": "pending",
+      "order_status": "dispatched",
+      "delivery_date": "2026-10-14",
+      "delivery_address": "",
+      "notes": "",
+      "created_by": "Owner",
+      "created_at": "2026-10-14T14:45:35.657+00:00",
+      "updated_at": "2026-10-14T14:45:36.825+00:00",
+      "customer": {
+        "id": "cust-1791989056037-oj23o",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Audit Verification Cust 2046 (Updated)",
+        "phone": "03006917528",
+        "address": "Renovated House 99, Quetta"
+      },
+      "items": [
+        {
+          "id": "item-1791989136213-zpgy2",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791989135657",
+          "quantity": 1,
+          "product_id": "prod-19l-can",
+          "unit_price": 260,
+          "total_price": 260,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "Audit Verification Cust 2046 (Updated)",
+      "customer_phone": "03006917528",
+      "customer_area": "Chiltan Scheme Airport Road"
+    },
+    {
+      "id": "ord-1791989057218",
+      "order_number": "ORD-057218",
+      "customer_id": "cust-1791989056037-oj23o",
+      "total_amount": 520,
+      "payment_type": "Cash",
+      "payment_status": "paid",
+      "order_status": "completed",
+      "delivery_date": "2026-10-14",
+      "delivery_address": "",
+      "notes": "Audit verification test order",
+      "created_by": "Owner",
+      "created_at": "2026-10-14T14:44:17.218+00:00",
+      "updated_at": "2026-10-14T14:44:18.878+00:00",
+      "customer": {
+        "id": "cust-1791989056037-oj23o",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Audit Verification Cust 2046 (Updated)",
+        "phone": "03006917528",
+        "address": "Renovated House 99, Quetta"
+      },
+      "items": [
+        {
+          "id": "item-1791989057488-f5guh",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791989057218",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 260,
+          "total_price": 520,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "Audit Verification Cust 2046 (Updated)",
+      "customer_phone": "03006917528",
+      "customer_area": "Chiltan Scheme Airport Road"
+    },
+    {
+      "id": "ord-1791988342430",
+      "order_number": "ORD-342430",
+      "customer_id": "cust-1791988340960-vcf90",
+      "total_amount": 750,
+      "payment_type": "Cash",
+      "payment_status": "paid",
+      "order_status": "completed",
+      "delivery_date": "2026-10-14",
+      "delivery_address": "Airport Road Plaza 4, Quetta",
+      "notes": "",
+      "created_by": "Owner",
+      "created_at": "2026-10-14T14:32:22.43+00:00",
+      "updated_at": "2026-10-14T14:32:23.899+00:00",
+      "customer": {
+        "id": "cust-1791988340960-vcf90",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Audit Verification Customer 0890 (Updated)",
+        "phone": "03007654321",
+        "address": "Airport Road Plaza 4, Quetta (Renovated)"
+      },
+      "items": [
+        {
+          "id": "item-1791988342559-4th4a",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791988342430",
+          "quantity": 3,
+          "product_id": "prod-19l-can",
+          "unit_price": 250,
+          "total_price": 750,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "Audit Verification Customer 0890 (Updated)",
+      "customer_phone": "03007654321",
+      "customer_area": "Chiltan Scheme Airport Road"
+    },
+    {
+      "id": "ord-1791988276924",
+      "order_number": "ORD-276924",
+      "customer_id": "cust-1791988274344-h6p7a",
+      "total_amount": 480,
+      "payment_type": "Cash",
+      "payment_status": "paid",
+      "order_status": "completed",
+      "delivery_date": "2026-10-14",
+      "delivery_address": "Test Street 1, Quetta",
+      "notes": "",
+      "created_by": "Owner",
+      "created_at": "2026-10-14T14:31:16.924+00:00",
+      "updated_at": "2026-10-14T14:31:18.775+00:00",
+      "customer": {
+        "id": "cust-1791988274344-h6p7a",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Audit Test Customer 4252 (Updated)",
+        "phone": "03001234567",
+        "address": "Test Street 1, Quetta (Updated)"
+      },
+      "items": [
+        {
+          "id": "item-1791988277135-lo73p",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791988276924",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 240,
+          "total_price": 480,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "Audit Test Customer 4252 (Updated)",
+      "customer_phone": "03001234567",
+      "customer_area": "Chiltan Scheme Airport Road"
+    },
+    {
+      "id": "ord-1791835235860",
+      "order_number": "ORD-235860",
+      "customer_id": "cust-1791826319726",
+      "total_amount": 260,
+      "payment_type": "Cash",
+      "payment_status": "paid",
+      "order_status": "completed",
+      "delivery_date": "2026-10-12",
+      "delivery_address": "5308 County Road 700",
+      "notes": "",
+      "created_by": "Owner",
+      "created_at": "2026-10-12T20:00:35.86+00:00",
+      "updated_at": "2026-10-12T20:00:50.528+00:00",
+      "customer": {
+        "id": "cust-1791826319726",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "THOMASINE M COLEMAN",
+        "phone": "0987654321",
+        "address": "5308 County Road 700"
+      },
+      "items": [
+        {
+          "id": "item-1791835236622-0wgb3",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791835235860",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 130,
+          "total_price": 260,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "THOMASINE M COLEMAN",
+      "customer_phone": "0987654321",
+      "customer_area": "Chiltan Scheme Airport Road"
+    },
+    {
+      "id": "ord-1791826360496",
+      "order_number": "ORD-360496",
+      "customer_id": "cust-1791756601303",
+      "total_amount": 280,
+      "payment_type": "Cash",
+      "payment_status": "paid",
+      "order_status": "completed",
+      "delivery_date": "2026-10-12",
+      "delivery_address": "sahar housing schme house no 1",
+      "notes": "",
+      "created_by": "Owner",
+      "created_at": "2026-10-12T17:32:40.496+00:00",
+      "updated_at": "2026-10-12T20:01:17.975+00:00",
+      "customer": {
+        "id": "cust-1791756601303",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Marwan khan kakar",
+        "phone": "03178019253",
+        "address": "sahar housing schme house no 1"
+      },
+      "items": [
+        {
+          "id": "item-1791826360823-3q3je",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791826360496",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 140,
+          "total_price": 280,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "Marwan khan kakar",
+      "customer_phone": "03178019253",
+      "customer_area": "Chiltan Scheme Airport Road"
+    },
+    {
+      "id": "ord-1791826341166",
+      "order_number": "ORD-341166",
+      "customer_id": "cust-1791826297921",
+      "total_amount": 260,
+      "payment_type": "Cash",
+      "payment_status": "paid",
+      "order_status": "completed",
+      "delivery_date": "2026-10-12",
+      "delivery_address": "chiltan schme house number 2",
+      "notes": "",
+      "created_by": "Owner",
+      "created_at": "2026-10-12T17:32:21.166+00:00",
+      "updated_at": "2026-10-12T20:01:28.787+00:00",
+      "customer": {
+        "id": "cust-1791826297921",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "fazal shah",
+        "phone": "03138941234",
+        "address": "chiltan schme house number 2"
+      },
+      "items": [
+        {
+          "id": "item-1791826341749-eydyx",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791826341166",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 130,
+          "total_price": 260,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "fazal shah",
+      "customer_phone": "03138941234",
+      "customer_area": "Chiltan Scheme Airport Road"
+    },
     {
       "id": "ord-1791817891611",
       "order_number": "ORD-891611",
@@ -1354,9 +1820,385 @@
       "quantity": 2,
       "unit_price": 220,
       "total_price": 440
+    },
+    {
+      "id": "oi-1791988277523-5cfay",
+      "order_id": "ord-1791988276924",
+      "product_id": "prod-19l-can",
+      "quantity": 2,
+      "unit_price": 240,
+      "total_price": 480
+    },
+    {
+      "id": "oi-1791988342821-aj9pl",
+      "order_id": "ord-1791988342430",
+      "product_id": "prod-19l-can",
+      "quantity": 3,
+      "unit_price": 250,
+      "total_price": 750
+    },
+    {
+      "id": "oi-1791989057774-prqic",
+      "order_id": "ord-1791989057218",
+      "product_id": "prod-19l-can",
+      "quantity": 2,
+      "unit_price": 260,
+      "total_price": 520
+    },
+    {
+      "id": "oi-1791989136530-c389u",
+      "order_id": "ord-1791989135657",
+      "product_id": "prod-19l-can",
+      "quantity": 1,
+      "unit_price": 260,
+      "total_price": 260
+    },
+    {
+      "id": "oi-1791989226303-xupq7",
+      "order_id": "ord-1791989225912",
+      "product_id": "prod-19l-can",
+      "quantity": 2,
+      "unit_price": 240,
+      "total_price": 480
     }
   ],
   "deliveries": [
+    {
+      "id": "del-1791989226016",
+      "delivery_number": "DEL-226016",
+      "order_id": "ord-1791989225912",
+      "customer_id": "cust-1791989224727-8192d",
+      "driver_id": "89198262-90b1-4e0d-adcc-63091463ba52",
+      "vehicle": "Van #1",
+      "delivery_date": "2026-10-14",
+      "delivery_time": "Morning",
+      "status": "delivered",
+      "empty_cans_returned": 2,
+      "payment_collected": 480,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "Order verification test",
+      "completed_at": "2026-10-14T14:47:07.784+00:00",
+      "created_at": "2026-10-14T14:47:05.912+00:00",
+      "updated_at": "2026-10-14T14:47:07.784+00:00",
+      "customer": {
+        "id": "cust-1791989224727-8192d",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Auto Flow Cust 1427 (Verified)",
+        "phone": "03003481118",
+        "address": "Plot 45B Street 3, Quetta (Renovated)"
+      },
+      "order": {
+        "id": "ord-1791989225912",
+        "order_number": "ORD-225912",
+        "total_amount": 480
+      },
+      "items": [],
+      "customer_name": "Auto Flow Cust 1427 (Verified)",
+      "customer_phone": "03003481118",
+      "customer_address": "Plot 45B Street 3, Quetta (Renovated)",
+      "customer_area": "Chiltan Scheme Airport Road",
+      "order_number": "ORD-225912",
+      "total_amount": 480,
+      "driver_name": "kakar1"
+    },
+    {
+      "id": "del-1791989136213",
+      "delivery_number": "DEL-136213",
+      "order_id": "ord-1791989135657",
+      "customer_id": "cust-1791989056037-oj23o",
+      "driver_id": "89198262-90b1-4e0d-adcc-63091463ba52",
+      "vehicle": "Van #1",
+      "delivery_date": "2026-10-14",
+      "delivery_time": "Morning",
+      "status": "assigned",
+      "empty_cans_returned": 0,
+      "payment_collected": 0,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "",
+      "completed_at": null,
+      "created_at": "2026-10-14T14:45:35.657+00:00",
+      "updated_at": "2026-10-14T14:45:36.825+00:00",
+      "customer": {
+        "id": "cust-1791989056037-oj23o",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Audit Verification Cust 2046 (Updated)",
+        "phone": "03006917528",
+        "address": "Renovated House 99, Quetta"
+      },
+      "order": {
+        "id": "ord-1791989135657",
+        "order_number": "ORD-135657",
+        "total_amount": 260
+      },
+      "items": [],
+      "customer_name": "Audit Verification Cust 2046 (Updated)",
+      "customer_phone": "03006917528",
+      "customer_address": "Renovated House 99, Quetta",
+      "customer_area": "Chiltan Scheme Airport Road",
+      "order_number": "ORD-135657",
+      "total_amount": 260,
+      "driver_name": "kakar1"
+    },
+    {
+      "id": "del-1791989057488",
+      "delivery_number": "DEL-057488",
+      "order_id": "ord-1791989057218",
+      "customer_id": "cust-1791989056037-oj23o",
+      "driver_id": "89198262-90b1-4e0d-adcc-63091463ba52",
+      "vehicle": "Suzuki Carry Van #2",
+      "delivery_date": "2026-10-14",
+      "delivery_time": "Afternoon",
+      "status": "delivered",
+      "empty_cans_returned": 2,
+      "payment_collected": 520,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "Audit verification test order",
+      "completed_at": "2026-10-14T14:44:18.878+00:00",
+      "created_at": "2026-10-14T14:44:17.218+00:00",
+      "updated_at": "2026-10-14T14:44:18.878+00:00",
+      "customer": {
+        "id": "cust-1791989056037-oj23o",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Audit Verification Cust 2046 (Updated)",
+        "phone": "03006917528",
+        "address": "Renovated House 99, Quetta"
+      },
+      "order": {
+        "id": "ord-1791989057218",
+        "order_number": "ORD-057218",
+        "total_amount": 520
+      },
+      "items": [
+        {
+          "id": "ditem-1791989057488-xtlh4",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can"
+          },
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "delivery_id": "del-1791989057488",
+          "product_name": "AAB E ARWA 19L Premium Water Can"
+        }
+      ],
+      "customer_name": "Audit Verification Cust 2046 (Updated)",
+      "customer_phone": "03006917528",
+      "customer_address": "Renovated House 99, Quetta",
+      "customer_area": "Chiltan Scheme Airport Road",
+      "order_number": "ORD-057218",
+      "total_amount": 520,
+      "driver_name": "kakar1"
+    },
+    {
+      "id": "del-1791988342559",
+      "delivery_number": "DEL-342559",
+      "order_id": "ord-1791988342430",
+      "customer_id": "cust-1791988340960-vcf90",
+      "driver_id": "89198262-90b1-4e0d-adcc-63091463ba52",
+      "vehicle": "Van #2",
+      "delivery_date": "2026-10-14",
+      "delivery_time": "Morning",
+      "status": "delivered",
+      "empty_cans_returned": 3,
+      "payment_collected": 750,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "",
+      "completed_at": "2026-10-14T14:32:23.899+00:00",
+      "created_at": "2026-10-14T14:32:22.43+00:00",
+      "updated_at": "2026-10-14T14:32:23.899+00:00",
+      "customer": {
+        "id": "cust-1791988340960-vcf90",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Audit Verification Customer 0890 (Updated)",
+        "phone": "03007654321",
+        "address": "Airport Road Plaza 4, Quetta (Renovated)"
+      },
+      "order": {
+        "id": "ord-1791988342430",
+        "order_number": "ORD-342430",
+        "total_amount": 750
+      },
+      "items": [],
+      "customer_name": "Audit Verification Customer 0890 (Updated)",
+      "customer_phone": "03007654321",
+      "customer_address": "Airport Road Plaza 4, Quetta (Renovated)",
+      "customer_area": "Chiltan Scheme Airport Road",
+      "order_number": "ORD-342430",
+      "total_amount": 750,
+      "driver_name": "kakar1"
+    },
+    {
+      "id": "del-1791988277135",
+      "delivery_number": "DEL-277135",
+      "order_id": "ord-1791988276924",
+      "customer_id": "cust-1791988274344-h6p7a",
+      "driver_id": "89198262-90b1-4e0d-adcc-63091463ba52",
+      "vehicle": "Van #1",
+      "delivery_date": "2026-10-14",
+      "delivery_time": "Morning",
+      "status": "delivered",
+      "empty_cans_returned": 2,
+      "payment_collected": 480,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "",
+      "completed_at": "2026-10-14T14:31:18.775+00:00",
+      "created_at": "2026-10-14T14:31:16.924+00:00",
+      "updated_at": "2026-10-14T14:31:18.775+00:00",
+      "customer": {
+        "id": "cust-1791988274344-h6p7a",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Audit Test Customer 4252 (Updated)",
+        "phone": "03001234567",
+        "address": "Test Street 1, Quetta (Updated)"
+      },
+      "order": {
+        "id": "ord-1791988276924",
+        "order_number": "ORD-276924",
+        "total_amount": 480
+      },
+      "items": [],
+      "customer_name": "Audit Test Customer 4252 (Updated)",
+      "customer_phone": "03001234567",
+      "customer_address": "Test Street 1, Quetta (Updated)",
+      "customer_area": "Chiltan Scheme Airport Road",
+      "order_number": "ORD-276924",
+      "total_amount": 480,
+      "driver_name": "kakar1"
+    },
+    {
+      "id": "del-1791835236622",
+      "delivery_number": "DEL-236622",
+      "order_id": "ord-1791835235860",
+      "customer_id": "cust-1791826319726",
+      "driver_id": "owner-uuid-001",
+      "vehicle": "Suzuki APV (LEA-819)",
+      "delivery_date": "2026-10-12",
+      "delivery_time": "11:00 AM",
+      "status": "delivered",
+      "empty_cans_returned": 0,
+      "payment_collected": 260,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "",
+      "completed_at": "2026-10-12T20:00:50.528+00:00",
+      "created_at": "2026-10-12T20:00:35.86+00:00",
+      "updated_at": "2026-10-12T20:00:50.528+00:00",
+      "customer": {
+        "id": "cust-1791826319726",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "THOMASINE M COLEMAN",
+        "phone": "0987654321",
+        "address": "5308 County Road 700"
+      },
+      "order": {
+        "id": "ord-1791835235860",
+        "order_number": "ORD-235860",
+        "total_amount": 260
+      },
+      "items": [
+        {
+          "id": "ditem-1791835236622-uvww6",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can"
+          },
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "delivery_id": "del-1791835236622",
+          "product_name": "AAB E ARWA 19L Premium Water Can"
+        }
+      ],
+      "customer_name": "THOMASINE M COLEMAN",
+      "customer_phone": "0987654321",
+      "customer_address": "5308 County Road 700",
+      "customer_area": "Chiltan Scheme Airport Road",
+      "order_number": "ORD-235860",
+      "total_amount": 260,
+      "driver_name": "Aab-e-Arwa Owner"
+    },
+    {
+      "id": "del-1791826360823",
+      "delivery_number": "DEL-360823",
+      "order_id": "ord-1791826360496",
+      "customer_id": "cust-1791756601303",
+      "driver_id": null,
+      "vehicle": "Van #1",
+      "delivery_date": "2026-10-12",
+      "delivery_time": "Morning",
+      "status": "delivered",
+      "empty_cans_returned": 0,
+      "payment_collected": 280,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "",
+      "completed_at": "2026-10-12T20:01:17.975+00:00",
+      "created_at": "2026-10-12T17:32:40.496+00:00",
+      "updated_at": "2026-10-12T20:01:17.975+00:00",
+      "customer": {
+        "id": "cust-1791756601303",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Marwan khan kakar",
+        "phone": "03178019253",
+        "address": "sahar housing schme house no 1"
+      },
+      "order": {
+        "id": "ord-1791826360496",
+        "order_number": "ORD-360496",
+        "total_amount": 280
+      },
+      "items": [],
+      "customer_name": "Marwan khan kakar",
+      "customer_phone": "03178019253",
+      "customer_address": "sahar housing schme house no 1",
+      "customer_area": "Chiltan Scheme Airport Road",
+      "order_number": "ORD-360496",
+      "total_amount": 280,
+      "driver_name": "Unassigned"
+    },
+    {
+      "id": "del-1791826341749",
+      "delivery_number": "DEL-341749",
+      "order_id": "ord-1791826341166",
+      "customer_id": "cust-1791826297921",
+      "driver_id": null,
+      "vehicle": "Van #1",
+      "delivery_date": "2026-10-12",
+      "delivery_time": "Morning",
+      "status": "delivered",
+      "empty_cans_returned": 0,
+      "payment_collected": 260,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "",
+      "completed_at": "2026-10-12T20:01:28.787+00:00",
+      "created_at": "2026-10-12T17:32:21.166+00:00",
+      "updated_at": "2026-10-12T20:01:28.787+00:00",
+      "customer": {
+        "id": "cust-1791826297921",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "fazal shah",
+        "phone": "03138941234",
+        "address": "chiltan schme house number 2"
+      },
+      "order": {
+        "id": "ord-1791826341166",
+        "order_number": "ORD-341166",
+        "total_amount": 260
+      },
+      "items": [],
+      "customer_name": "fazal shah",
+      "customer_phone": "03138941234",
+      "customer_address": "chiltan schme house number 2",
+      "customer_area": "Chiltan Scheme Airport Road",
+      "order_number": "ORD-341166",
+      "total_amount": 260,
+      "driver_name": "Unassigned"
+    },
     {
       "id": "del-1791817891766",
       "delivery_number": "DEL-891766",
@@ -2009,7 +2851,282 @@
       "driver_name": "Unassigned"
     }
   ],
-  "customer_can_movements": [],
+  "customer_can_movements": [
+    {
+      "id": "canmov-1791990390450-etpx",
+      "customer_id": "cust-1791826319726",
+      "customer_name": "THOMASINE M COLEMAN",
+      "product_id": "prod-19l-can",
+      "movement_type": "set_balance",
+      "quantity": 1,
+      "balance_after": 6,
+      "reason": "Physical reconciliation at customer site | Note: Confirmed 6 cans on site",
+      "notes": "Confirmed 6 cans on site",
+      "user_id": "owner-uuid-001",
+      "user_name": "Aab-e-Arwa Owner",
+      "created_at": "2026-10-14T15:06:30.45+00:00",
+      "delivery_id": null
+    },
+    {
+      "id": "canmov-1791990389089-co",
+      "customer_id": "company-asset-pool",
+      "customer_name": "Company Physical Asset Pool",
+      "product_id": "prod-19l-can",
+      "movement_type": "company_cans_addition",
+      "quantity": 29,
+      "balance_after": 620,
+      "reason": "Physical warehouse count verification by Owner",
+      "notes": "Count audited in Plant Section A",
+      "user_name": "Aab-e-Arwa Owner",
+      "user_id": "owner-uuid-001",
+      "created_at": "2026-10-14T15:06:29.089Z"
+    },
+    {
+      "id": "canmov-1791990182660-xztf",
+      "customer_id": "cust-1791826319726",
+      "customer_name": "THOMASINE M COLEMAN",
+      "product_id": "prod-19l-can",
+      "movement_type": "issue_more",
+      "quantity": 3,
+      "balance_after": 5,
+      "reason": "Delivered additional backup cans to customer site | Note: Requested for seasonal event",
+      "notes": "Requested for seasonal event",
+      "user_id": "owner-uuid-001",
+      "user_name": "Aab-e-Arwa Owner",
+      "created_at": "2026-10-14T15:03:02.66+00:00",
+      "delivery_id": null
+    },
+    {
+      "id": "canmov-1791990169154-co",
+      "customer_id": "company-asset-pool",
+      "customer_name": "Company Physical Asset Pool",
+      "product_id": "prod-19l-can",
+      "movement_type": "company_cans_addition",
+      "quantity": 50,
+      "balance_after": 591,
+      "reason": "Procured 50 new 19L cans",
+      "notes": "PO-001",
+      "user_name": "Aab-e-Arwa Owner",
+      "user_id": "owner-uuid-001",
+      "created_at": "2026-10-14T15:02:49.153Z"
+    },
+    {
+      "id": "canmov-1791989229624-ret",
+      "customer_id": "cust-1791989224727-8192d",
+      "product_id": "prod-19l-can",
+      "movement_type": "returned",
+      "quantity": 2,
+      "balance_after": 0,
+      "delivery_id": "del-1791989226016",
+      "reason": "Returned from Delivery DEL-226016",
+      "user_id": null,
+      "created_at": "2026-10-14T14:47:07.784+00:00"
+    },
+    {
+      "id": "canmov-1791989229479-del",
+      "customer_id": "cust-1791989224727-8192d",
+      "product_id": "prod-19l-can",
+      "movement_type": "issued",
+      "quantity": 2,
+      "balance_after": 2,
+      "delivery_id": "del-1791989226016",
+      "reason": "Delivered from DEL-226016",
+      "user_id": null,
+      "created_at": "2026-10-14T14:47:07.784+00:00"
+    },
+    {
+      "id": "canmov-1791989060246-ret",
+      "customer_id": "cust-1791989056037-oj23o",
+      "product_id": "prod-19l-can",
+      "movement_type": "returned",
+      "quantity": 2,
+      "balance_after": 0,
+      "delivery_id": "del-1791989057488",
+      "reason": "Returned from Delivery DEL-057488",
+      "user_id": null,
+      "created_at": "2026-10-14T14:44:18.878+00:00"
+    },
+    {
+      "id": "canmov-1791989060144-del",
+      "customer_id": "cust-1791989056037-oj23o",
+      "product_id": "prod-19l-can",
+      "movement_type": "issued",
+      "quantity": 2,
+      "balance_after": 2,
+      "delivery_id": "del-1791989057488",
+      "reason": "Delivered from DEL-057488",
+      "user_id": null,
+      "created_at": "2026-10-14T14:44:18.878+00:00"
+    },
+    {
+      "id": "canmov-1791988345455-del",
+      "customer_id": "cust-1791988340960-vcf90",
+      "product_id": "prod-19l-can",
+      "movement_type": "issued",
+      "quantity": 3,
+      "balance_after": 3,
+      "delivery_id": "del-1791988342559",
+      "reason": "Delivered from DEL-342559",
+      "user_id": null,
+      "created_at": "2026-10-14T14:32:23.899+00:00"
+    },
+    {
+      "id": "canmov-1791988345595-ret",
+      "customer_id": "cust-1791988340960-vcf90",
+      "product_id": "prod-19l-can",
+      "movement_type": "returned",
+      "quantity": 3,
+      "balance_after": 0,
+      "delivery_id": "del-1791988342559",
+      "reason": "Returned from Delivery DEL-342559",
+      "user_id": null,
+      "created_at": "2026-10-14T14:32:23.899+00:00"
+    },
+    {
+      "id": "canmov-1791988280930-ret",
+      "customer_id": "cust-1791988274344-h6p7a",
+      "product_id": "prod-19l-can",
+      "movement_type": "returned",
+      "quantity": 2,
+      "balance_after": 0,
+      "delivery_id": "del-1791988277135",
+      "reason": "Returned from Delivery DEL-277135",
+      "user_id": null,
+      "created_at": "2026-10-14T14:31:18.775+00:00"
+    },
+    {
+      "id": "canmov-1791988280602-del",
+      "customer_id": "cust-1791988274344-h6p7a",
+      "product_id": "prod-19l-can",
+      "movement_type": "issued",
+      "quantity": 2,
+      "balance_after": 2,
+      "delivery_id": "del-1791988277135",
+      "reason": "Delivered from DEL-277135",
+      "user_id": null,
+      "created_at": "2026-10-14T14:31:18.775+00:00"
+    },
+    {
+      "id": "can-probe-1",
+      "customer_id": "cust-1791753446040",
+      "product_id": "prod-19l-can",
+      "movement_type": "issue",
+      "quantity": 1,
+      "balance_after": 1,
+      "delivery_id": null,
+      "reason": null,
+      "user_id": null,
+      "created_at": "2026-10-13T23:44:41.324539+00:00"
+    },
+    {
+      "id": "canmov-1791835292270-del",
+      "customer_id": "cust-1791826297921",
+      "product_id": "prod-19l-can",
+      "movement_type": "issued",
+      "quantity": 2,
+      "balance_after": 3,
+      "delivery_id": "del-1791826341749",
+      "reason": "Delivered from DEL-341749",
+      "user_id": null,
+      "created_at": "2026-10-12T20:01:28.787+00:00"
+    },
+    {
+      "id": "canmov-1791835282895-del",
+      "customer_id": "cust-1791756601303",
+      "product_id": "prod-19l-can",
+      "movement_type": "issued",
+      "quantity": 2,
+      "balance_after": 4,
+      "delivery_id": "del-1791826360823",
+      "reason": "Delivered from DEL-360823",
+      "user_id": null,
+      "created_at": "2026-10-12T20:01:17.975+00:00"
+    },
+    {
+      "id": "canmov-1791835255230-del",
+      "customer_id": "cust-1791826319726",
+      "product_id": "prod-19l-can",
+      "movement_type": "issued",
+      "quantity": 2,
+      "balance_after": 2,
+      "delivery_id": "del-1791835236622",
+      "reason": "Delivered from DEL-236622",
+      "user_id": null,
+      "created_at": "2026-10-12T20:00:50.528+00:00"
+    },
+    {
+      "id": "canmov-1791817895115-ret",
+      "customer_id": "cust-1791790344048",
+      "product_id": "prod-19l-can",
+      "movement_type": "returned",
+      "quantity": 1,
+      "balance_after": 2,
+      "delivery_id": "del-1791817891766",
+      "reason": "Returned from Delivery DEL-891766",
+      "user_id": null,
+      "created_at": "2026-10-12T15:11:33.507+00:00"
+    },
+    {
+      "id": "canmov-1791817894989-del",
+      "customer_id": "cust-1791790344048",
+      "product_id": "prod-19l-can",
+      "movement_type": "issued",
+      "quantity": 2,
+      "balance_after": 3,
+      "delivery_id": "del-1791817891766",
+      "reason": "Delivered from DEL-891766",
+      "user_id": null,
+      "created_at": "2026-10-12T15:11:33.507+00:00"
+    },
+    {
+      "id": "canmov-1791790070897",
+      "customer_id": "cust-1791789996338",
+      "product_id": "prod-19l-can",
+      "movement_type": "returned",
+      "quantity": 1,
+      "balance_after": 0,
+      "delivery_id": "del-1791790020878",
+      "reason": "Returned from Delivery DEL-020878",
+      "user_id": null,
+      "created_at": "2026-10-12T07:27:49.844+00:00"
+    },
+    {
+      "id": "canmov-1791790068582",
+      "customer_id": "cust-1791789996338",
+      "product_id": "prod-19l-can",
+      "movement_type": "returned",
+      "quantity": 1,
+      "balance_after": 1,
+      "delivery_id": "del-1791790020878",
+      "reason": "Returned from Delivery DEL-020878",
+      "user_id": null,
+      "created_at": "2026-10-12T07:27:46.157+00:00"
+    },
+    {
+      "id": "canmov-1791756865444",
+      "customer_id": "cust-1791756801537",
+      "product_id": "prod-19l-can",
+      "movement_type": "returned",
+      "quantity": 1,
+      "balance_after": 2,
+      "delivery_id": "del-1791756812899",
+      "reason": "Returned from Delivery DEL-812899",
+      "user_id": null,
+      "created_at": "2026-10-11T22:14:23.274+00:00"
+    },
+    {
+      "id": "canmov-1791756073842",
+      "customer_id": "cust-1791753504017",
+      "product_id": "prod-19l-can",
+      "movement_type": "returned",
+      "quantity": 4,
+      "balance_after": 0,
+      "delivery_id": "del-1791756072607",
+      "reason": "Returned from Delivery DEL-072607",
+      "user_id": null,
+      "created_at": "2026-10-11T22:01:13.312+00:00"
+    }
+  ],
   "customer_ledger": [],
   "payments": [],
   "expenses": [],
@@ -2059,7 +3176,729 @@
   ],
   "suppliers": [],
   "supplier_transactions": [],
-  "audit_logs": [],
+  "audit_logs": [
+    {
+      "id": "aud-1791990391305-w3cq9a",
+      "user_id": "owner-uuid-001",
+      "user_name": "Aab-e-Arwa Owner",
+      "user_role": "Owner",
+      "action": "ADJUST_CUSTOMER_CANS",
+      "module": "cans",
+      "record_ref": "cust-1791826319726",
+      "details": "Customer cans adjusted for \"THOMASINE M COLEMAN\" (Chiltan Scheme Airport Road): set_balance (+1) | Balance: 5 → 6 cans | Reason: Physical reconciliation at customer site | Note: Confirmed 6 cans on site",
+      "old_value": {
+        "cans_held": 5
+      },
+      "new_value": {
+        "cans_held": 6,
+        "change_type": "set_balance",
+        "delta": 1,
+        "reason": "Physical reconciliation at customer site",
+        "notes": "Confirmed 6 cans on site"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T15:06:31.305Z"
+    },
+    {
+      "id": "aud-1791990390114-pdg0ed",
+      "user_id": "owner-uuid-001",
+      "user_name": "Aab-e-Arwa Owner",
+      "user_role": "Owner",
+      "action": "ADJUST_COMPANY_CANS",
+      "module": "cans",
+      "record_ref": "prod-19l-can",
+      "details": "Total company physical 19L cans adjusted: 591 → 620 (+29) [Empty in Plant: 86, Filled in Plant: 513, With Customers: 21, Damaged: 0, Lost: 0] | Reason: Physical warehouse count verification by Owner | Note: Count audited in Plant Section A",
+      "old_value": {
+        "total_company_cans": 591,
+        "empty_in_plant": 57,
+        "filled_stock": 513,
+        "with_customers": 21,
+        "damaged_cans": 0,
+        "lost_cans": 0
+      },
+      "new_value": {
+        "total_company_cans": 620,
+        "empty_in_plant": 86,
+        "filled_stock": 513,
+        "with_customers": 21,
+        "damaged_cans": 0,
+        "lost_cans": 0,
+        "delta": 29,
+        "reason": "Physical warehouse count verification by Owner",
+        "notes": "Count audited in Plant Section A"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T15:06:30.114Z"
+    },
+    {
+      "id": "aud-1791990183454-i7ovpl",
+      "user_id": "owner-uuid-001",
+      "user_name": "Aab-e-Arwa Owner",
+      "user_role": "Owner",
+      "action": "ADJUST_CUSTOMER_CANS",
+      "module": "cans",
+      "record_ref": "cust-1791826319726",
+      "details": "Customer cans adjusted for \"THOMASINE M COLEMAN\" (Chiltan Scheme Airport Road): issue_more (+3) | Balance: 2 → 5 cans | Reason: Delivered additional backup cans to customer site | Note: Requested for seasonal event",
+      "old_value": {
+        "cans_held": 2
+      },
+      "new_value": {
+        "cans_held": 5,
+        "change_type": "issue_more",
+        "delta": 3,
+        "reason": "Delivered additional backup cans to customer site",
+        "notes": "Requested for seasonal event"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T15:03:03.454Z"
+    },
+    {
+      "id": "aud-1791990169904-5mi3dd",
+      "user_id": "owner-uuid-001",
+      "user_name": "Aab-e-Arwa Owner",
+      "user_role": "Owner",
+      "action": "ADJUST_COMPANY_CANS",
+      "module": "cans",
+      "record_ref": "prod-19l-can",
+      "details": "Total company physical 19L cans adjusted: 541 → 591 (+50) [Empty in Plant: 60, Filled in Plant: 513, With Customers: 18, Damaged: 0, Lost: 0] | Reason: Procured 50 new 19L cans | Note: PO-001",
+      "old_value": {
+        "total_company_cans": 541,
+        "empty_in_plant": 10,
+        "filled_stock": 513,
+        "with_customers": 18,
+        "damaged_cans": 0,
+        "lost_cans": 0
+      },
+      "new_value": {
+        "total_company_cans": 591,
+        "empty_in_plant": 60,
+        "filled_stock": 513,
+        "with_customers": 18,
+        "damaged_cans": 0,
+        "lost_cans": 0,
+        "delta": 50,
+        "reason": "Procured 50 new 19L cans",
+        "notes": "PO-001"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T15:02:49.904Z"
+    },
+    {
+      "id": "aud-1791989230780-zismk9",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "STOCK_INCREASE",
+      "module": "inventory",
+      "record_ref": "prod-19l-can",
+      "details": "Stock adjustment for \"AAB E ARWA 19L Premium Water Can\": filled stock adjusted from 505 to 513 (+8) | Reason: Verified plant stock check",
+      "old_value": {
+        "product_id": "prod-19l-can",
+        "stock_type": "filled",
+        "stock": 505
+      },
+      "new_value": {
+        "product_id": "prod-19l-can",
+        "stock_type": "filled",
+        "stock": 513,
+        "delta": 8,
+        "reason": "Verified plant stock check"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:47:10.780Z"
+    },
+    {
+      "id": "aud-1791989230221-p3uluh",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "COMPLETE_DELIVERY",
+      "module": "deliveries",
+      "record_ref": "del-1791989226016",
+      "details": "Completed delivery #del-1791989226016 | Returned cans: 2 | Cash collected: PKR 480",
+      "old_value": {
+        "status": "out_for_delivery"
+      },
+      "new_value": {
+        "status": "delivered",
+        "empty_cans_returned": 2,
+        "payment_collected": 480,
+        "payment_method": "Cash"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:47:10.221Z"
+    },
+    {
+      "id": "aud-1791989227379-8wgi4t",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "DISPATCH_ORDER",
+      "module": "deliveries",
+      "record_ref": "del-1791989226016",
+      "details": "Dispatched delivery #del-1791989226016 for order #ord-1791989225912 to driver \"89198262-90b1-4e0d-adcc-63091463ba52\" (Van #1)",
+      "old_value": null,
+      "new_value": {
+        "driver_id": "89198262-90b1-4e0d-adcc-63091463ba52",
+        "vehicle": "Van #1",
+        "status": "assigned"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:47:07.379Z"
+    },
+    {
+      "id": "aud-1791989226673-e8on22",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "CONFIRM_ORDER",
+      "module": "orders",
+      "record_ref": "ord-1791989225912",
+      "details": "Order #ORD-225912 status changed: confirmed → confirmed",
+      "old_value": {
+        "order_status": "confirmed",
+        "payment_status": "pending"
+      },
+      "new_value": {
+        "order_status": "confirmed",
+        "payment_status": "pending"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:47:06.673Z"
+    },
+    {
+      "id": "aud-1791989226304-ub27t5",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "CREATE_ORDER",
+      "module": "orders",
+      "record_ref": "ord-1791989225912",
+      "details": "Created order #ORD-225912 for customer \"Auto Flow Cust 1427 (Verified)\" | Total: PKR 480 | Delivery: 2026-10-14",
+      "old_value": null,
+      "new_value": {
+        "order_number": "ORD-225912",
+        "total_amount": 480,
+        "delivery_date": "2026-10-14",
+        "items_count": 1
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:47:06.304Z"
+    },
+    {
+      "id": "aud-1791989225633-am1avl",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "UPDATE_CUSTOMER",
+      "module": "customers",
+      "record_ref": "cust-1791989224727-8192d",
+      "details": "Updated customer \"Auto Flow Cust 1427 (Verified)\" profile details",
+      "old_value": {
+        "name": "Auto Flow Cust 1427",
+        "phone": "03003481118",
+        "area": "Chiltan Scheme Airport Road",
+        "selling_rate": 220,
+        "status": "active"
+      },
+      "new_value": {
+        "name": "Auto Flow Cust 1427 (Verified)",
+        "address": "Plot 45B Street 3, Quetta (Renovated)",
+        "selling_rate": 240,
+        "updated_at": "2026-10-14T14:47:05.366Z"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:47:05.633Z"
+    },
+    {
+      "id": "aud-1791989225077-akcrnj",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "CREATE_CUSTOMER",
+      "module": "customers",
+      "record_ref": "cust-1791989224727-8192d",
+      "details": "Created customer \"Auto Flow Cust 1427\" (Phone: 03003481118) in area \"Chiltan Scheme Airport Road\" | Selling Rate: PKR 220",
+      "old_value": null,
+      "new_value": {
+        "name": "Auto Flow Cust 1427",
+        "phone": "03003481118",
+        "area": "Chiltan Scheme Airport Road",
+        "selling_rate": 220,
+        "status": "active"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:47:05.077Z"
+    },
+    {
+      "id": "aud-1791989180104-39915q",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "STOCK_INCREASE",
+      "module": "inventory",
+      "record_ref": "prod-19l-can",
+      "details": "Stock adjustment for \"AAB E ARWA 19L Premium Water Can\": filled stock adjusted from 502 to 507 (+5) | Reason: End of day audit bottling check",
+      "old_value": {
+        "product_id": "prod-19l-can",
+        "stock_type": "filled",
+        "stock": 502
+      },
+      "new_value": {
+        "product_id": "prod-19l-can",
+        "stock_type": "filled",
+        "stock": 507,
+        "delta": 5,
+        "reason": "End of day audit bottling check"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:46:20.104Z"
+    },
+    {
+      "id": "aud-1791989178374-z2dii2",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "CONFIRM_ORDER",
+      "module": "orders",
+      "record_ref": "undefined",
+      "details": "Order #undefined status changed: pending → confirmed",
+      "old_value": {
+        "order_status": "pending",
+        "payment_status": "pending"
+      },
+      "new_value": {
+        "order_status": "confirmed",
+        "payment_status": "pending"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:46:18.374Z"
+    },
+    {
+      "id": "aud-1791989152836-jkt1nh",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "DISPATCH_ORDER",
+      "module": "deliveries",
+      "record_ref": "del-test-123",
+      "details": "Testing direct dispatch audit logging",
+      "old_value": null,
+      "new_value": null,
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:45:52.836Z"
+    },
+    {
+      "id": "aud-1791989136531-f4rvgy",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "CREATE_ORDER",
+      "module": "orders",
+      "record_ref": "ord-1791989135657",
+      "details": "Created order #ORD-135657 for customer \"Audit Verification Cust 2046 (Updated)\" | Total: PKR 260 | Delivery: 2026-10-14",
+      "old_value": null,
+      "new_value": {
+        "order_number": "ORD-135657",
+        "total_amount": 260,
+        "delivery_date": "2026-10-14",
+        "items_count": 1
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:45:36.531Z"
+    },
+    {
+      "id": "aud-1791989061070-mkp70z",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "STOCK_INCREASE",
+      "module": "inventory",
+      "record_ref": "prod-19l-can",
+      "details": "Stock adjustment for \"AAB E ARWA 19L Premium Water Can\": filled stock adjusted from 490 to 502 (+12) | Reason: Audit verification plant bottling stock QA",
+      "old_value": {
+        "product_id": "prod-19l-can",
+        "stock_type": "filled",
+        "stock": 490
+      },
+      "new_value": {
+        "product_id": "prod-19l-can",
+        "stock_type": "filled",
+        "stock": 502,
+        "delta": 12,
+        "reason": "Audit verification plant bottling stock QA"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:44:21.070Z"
+    },
+    {
+      "id": "aud-1791989060662-4g9axw",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "COMPLETE_DELIVERY",
+      "module": "deliveries",
+      "record_ref": "del-1791989057488",
+      "details": "Completed delivery #del-1791989057488 | Returned cans: 2 | Cash collected: PKR 520",
+      "old_value": {
+        "status": "out_for_delivery"
+      },
+      "new_value": {
+        "status": "delivered",
+        "empty_cans_returned": 2,
+        "payment_collected": 520,
+        "payment_method": "Cash"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:44:20.662Z"
+    },
+    {
+      "id": "aud-1791989058146-iadl3j",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "CONFIRM_ORDER",
+      "module": "orders",
+      "record_ref": "ord-1791989057218",
+      "details": "Order #ORD-057218 status changed: confirmed → confirmed",
+      "old_value": {
+        "order_status": "confirmed",
+        "payment_status": "pending"
+      },
+      "new_value": {
+        "order_status": "confirmed",
+        "payment_status": "pending"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:44:18.146Z"
+    },
+    {
+      "id": "aud-1791989057775-kdi85k",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "CREATE_ORDER",
+      "module": "orders",
+      "record_ref": "ord-1791989057218",
+      "details": "Created order #ORD-057218 for customer \"Audit Verification Cust 2046 (Updated)\" | Total: PKR 520 | Delivery: 2026-10-14",
+      "old_value": null,
+      "new_value": {
+        "order_number": "ORD-057218",
+        "total_amount": 520,
+        "delivery_date": "2026-10-14",
+        "items_count": 1
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:44:17.775Z"
+    },
+    {
+      "id": "aud-1791989056950-7rb4on",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "UPDATE_CUSTOMER",
+      "module": "customers",
+      "record_ref": "cust-1791989056037-oj23o",
+      "details": "Updated customer \"Audit Verification Cust 2046 (Updated)\" profile details",
+      "old_value": {
+        "name": "Audit Verification Cust 2046",
+        "phone": "03006917528",
+        "area": "Chiltan Scheme Airport Road",
+        "selling_rate": 230,
+        "status": "active"
+      },
+      "new_value": {
+        "name": "Audit Verification Cust 2046 (Updated)",
+        "address": "Renovated House 99, Quetta",
+        "selling_rate": 260,
+        "updated_at": "2026-10-14T14:44:16.839Z"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:44:16.950Z"
+    },
+    {
+      "id": "aud-1791989056693-kvo1lz",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "CREATE_CUSTOMER",
+      "module": "customers",
+      "record_ref": "cust-1791989056037-oj23o",
+      "details": "Created customer \"Audit Verification Cust 2046\" (Phone: 03006917528) in area \"Chiltan Scheme Airport Road\" | Selling Rate: PKR 230",
+      "old_value": null,
+      "new_value": {
+        "name": "Audit Verification Cust 2046",
+        "phone": "03006917528",
+        "area": "Chiltan Scheme Airport Road",
+        "selling_rate": 230,
+        "status": "active"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:44:16.693Z"
+    },
+    {
+      "id": "aud-1791988346525-cer1gw",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "STOCK_INCREASE",
+      "module": "inventory",
+      "record_ref": "prod-19l-can",
+      "details": "Stock adjustment for \"AAB E ARWA 19L Premium Water Can\": filled stock adjusted from 477 to 492 (+15) | Reason: Daily plant refilling audit",
+      "old_value": {
+        "product_id": "prod-19l-can",
+        "stock_type": "filled",
+        "stock": 477
+      },
+      "new_value": {
+        "product_id": "prod-19l-can",
+        "stock_type": "filled",
+        "stock": 492,
+        "delta": 15,
+        "reason": "Daily plant refilling audit"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:32:26.525Z"
+    },
+    {
+      "id": "aud-1791988346088-lvnw3m",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "COMPLETE_DELIVERY",
+      "module": "deliveries",
+      "record_ref": "del-1791988342559",
+      "details": "Completed delivery #del-1791988342559 | Returned cans: 3 | Cash collected: PKR 750",
+      "old_value": {
+        "status": "out_for_delivery"
+      },
+      "new_value": {
+        "status": "delivered",
+        "empty_cans_returned": 3,
+        "payment_collected": 750,
+        "payment_method": "Cash"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:32:26.088Z"
+    },
+    {
+      "id": "aud-1791988343225-x7rh5f",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "CONFIRM_ORDER",
+      "module": "orders",
+      "record_ref": "ord-1791988342430",
+      "details": "Order #ORD-342430 status changed: confirmed → confirmed",
+      "old_value": {
+        "order_status": "confirmed",
+        "payment_status": "pending"
+      },
+      "new_value": {
+        "order_status": "confirmed",
+        "payment_status": "pending"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:32:23.225Z"
+    },
+    {
+      "id": "aud-1791988342822-zqperu",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "CREATE_ORDER",
+      "module": "orders",
+      "record_ref": "ord-1791988342430",
+      "details": "Created order #ORD-342430 for customer \"Audit Verification Customer 0890 (Updated)\" | Total: PKR 750 | Delivery: 2026-10-14",
+      "old_value": null,
+      "new_value": {
+        "order_number": "ORD-342430",
+        "total_amount": 750,
+        "delivery_date": "2026-10-14",
+        "items_count": 1
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:32:22.822Z"
+    },
+    {
+      "id": "aud-1791988342149-46m78r",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "UPDATE_CUSTOMER",
+      "module": "customers",
+      "record_ref": "cust-1791988340960-vcf90",
+      "details": "Updated customer \"Audit Verification Customer 0890 (Updated)\" profile details",
+      "old_value": {
+        "name": "Audit Verification Customer 0890",
+        "phone": "03007654321",
+        "area": "Chiltan Scheme Airport Road",
+        "selling_rate": 220,
+        "status": "active"
+      },
+      "new_value": {
+        "name": "Audit Verification Customer 0890 (Updated)",
+        "phone": "03007654321",
+        "address": "Airport Road Plaza 4, Quetta (Renovated)",
+        "area": "Chiltan Scheme Airport Road",
+        "selling_rate": 250,
+        "updated_at": "2026-10-14T14:32:21.851Z"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:32:22.149Z"
+    },
+    {
+      "id": "aud-1791988341529-o1dhld",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "CREATE_CUSTOMER",
+      "module": "customers",
+      "record_ref": "cust-1791988340960-vcf90",
+      "details": "Created customer \"Audit Verification Customer 0890\" (Phone: 03007654321) in area \"Chiltan Scheme Airport Road\" | Selling Rate: PKR 220",
+      "old_value": null,
+      "new_value": {
+        "name": "Audit Verification Customer 0890",
+        "phone": "03007654321",
+        "area": "Chiltan Scheme Airport Road",
+        "selling_rate": 220,
+        "status": "active"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:32:21.529Z"
+    },
+    {
+      "id": "aud-1791988282091-7j3u1w",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "STOCK_INCREASE",
+      "module": "inventory",
+      "record_ref": "prod-19l-can",
+      "details": "Stock adjustment for \"AAB E ARWA 19L Premium Water Can\": filled stock adjusted from 470 to 480 (+10) | Reason: Batch filling QA check",
+      "old_value": {
+        "product_id": "prod-19l-can",
+        "stock_type": "filled",
+        "stock": 470
+      },
+      "new_value": {
+        "product_id": "prod-19l-can",
+        "stock_type": "filled",
+        "stock": 480,
+        "delta": 10,
+        "reason": "Batch filling QA check"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:31:22.091Z"
+    },
+    {
+      "id": "aud-1791988281604-6sjkqg",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "COMPLETE_DELIVERY",
+      "module": "deliveries",
+      "record_ref": "del-1791988277135",
+      "details": "Completed delivery #del-1791988277135 | Returned cans: 2 | Cash collected: PKR 480",
+      "old_value": {
+        "status": "out_for_delivery"
+      },
+      "new_value": {
+        "status": "delivered",
+        "empty_cans_returned": 2,
+        "payment_collected": 480,
+        "payment_method": "Cash"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:31:21.604Z"
+    },
+    {
+      "id": "aud-1791988277896-nt12ya",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "CONFIRM_ORDER",
+      "module": "orders",
+      "record_ref": "ord-1791988276924",
+      "details": "Order #ORD-276924 status changed: confirmed → confirmed",
+      "old_value": {
+        "order_status": "confirmed",
+        "payment_status": "pending"
+      },
+      "new_value": {
+        "order_status": "confirmed",
+        "payment_status": "pending"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:31:17.896Z"
+    },
+    {
+      "id": "aud-1791988277524-iwpp3x",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "CREATE_ORDER",
+      "module": "orders",
+      "record_ref": "ord-1791988276924",
+      "details": "Created order #ORD-276924 for customer \"Audit Test Customer 4252 (Updated)\" | Total: PKR 480 | Delivery: 2026-10-14",
+      "old_value": null,
+      "new_value": {
+        "order_number": "ORD-276924",
+        "total_amount": 480,
+        "delivery_date": "2026-10-14",
+        "items_count": 1
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:31:17.524Z"
+    },
+    {
+      "id": "aud-1791988276767-ftxc0t",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "UPDATE_CUSTOMER",
+      "module": "customers",
+      "record_ref": "cust-1791988274344-h6p7a",
+      "details": "Updated customer \"Audit Test Customer 4252 (Updated)\" profile details",
+      "old_value": {
+        "name": "Audit Test Customer 4252",
+        "phone": "03001234567",
+        "area": "Chiltan Scheme Airport Road",
+        "selling_rate": 220,
+        "status": "active"
+      },
+      "new_value": {
+        "name": "Audit Test Customer 4252 (Updated)",
+        "phone": "03001234567",
+        "address": "Test Street 1, Quetta (Updated)",
+        "area": "Chiltan Scheme Airport Road",
+        "selling_rate": 240,
+        "updated_at": "2026-10-14T14:31:16.634Z"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:31:16.767Z"
+    },
+    {
+      "id": "aud-1791988276229-ozhp6e",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "CREATE_CUSTOMER",
+      "module": "customers",
+      "record_ref": "cust-1791988274344-h6p7a",
+      "details": "Created customer \"Audit Test Customer 4252\" (Phone: 03001234567) in area \"Chiltan Scheme Airport Road\" | Selling Rate: PKR 220",
+      "old_value": null,
+      "new_value": {
+        "name": "Audit Test Customer 4252",
+        "phone": "03001234567",
+        "area": "Chiltan Scheme Airport Road",
+        "selling_rate": 220,
+        "status": "active"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-14T14:31:16.229Z"
+    }
+  ],
   "settings": {
     "business_name": "AAB E ARWA Premium Drinking Water",
     "business_phone": "+92 300 1234567",

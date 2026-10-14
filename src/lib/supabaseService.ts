@@ -1667,28 +1667,106 @@ export const SupabaseDataService = {
     };
   },
 
-  async adjustCustomerCans(adj: { customer_id: string; quantity: number; movement_type: 'issued' | 'returned' | 'adjusted'; reason?: string }): Promise<void> {
+  async adjustCustomerCans(adj: { customer_id: string; quantity: number; movement_type?: string; change_type?: string; reason?: string; notes?: string }): Promise<void> {
     assertRole(['Owner', 'Manager'], 'manually adjust customer can balance');
     const supabase = getSupabaseClient();
     const user = getCurrentAuthUser();
+    const mType = adj.change_type || adj.movement_type || 'issue_more';
 
     if (supabase) {
       const { data: cust } = await supabase.from('customers').select('cans_held').eq('id', adj.customer_id).single();
-      const currentHeld = cust?.cans_held || 0;
-      const delta = adj.movement_type === 'issued' ? adj.quantity : -adj.quantity;
-      const newBalance = Math.max(0, currentHeld + delta);
+      const currentHeld = Number(cust?.cans_held || 0);
+      let delta = adj.quantity;
+      let newBalance = currentHeld;
+
+      if (mType === 'issue_more') {
+        delta = adj.quantity;
+        newBalance = currentHeld + delta;
+      } else if (mType === 'return_cans') {
+        delta = -Math.min(currentHeld, adj.quantity);
+        newBalance = Math.max(0, currentHeld - adj.quantity);
+      } else if (mType === 'set_balance') {
+        newBalance = adj.quantity;
+        delta = newBalance - currentHeld;
+      } else if (mType === 'report_damaged' || mType === 'report_lost') {
+        delta = -Math.min(currentHeld, adj.quantity);
+        newBalance = Math.max(0, currentHeld - adj.quantity);
+      }
 
       await supabase.from('customer_can_movements').insert({
         customer_id: adj.customer_id,
         product_id: 'prod-19l-can',
-        movement_type: adj.movement_type,
-        quantity: adj.quantity,
+        movement_type: mType,
+        quantity: delta,
         balance_after: newBalance,
-        reason: adj.reason || 'Manual ledger audit adjustment',
+        reason: `${adj.reason || 'Manual ledger audit adjustment'}${adj.notes ? ` | Note: ${adj.notes}` : ''}`,
         user_id: user.id,
       });
 
-      await supabase.from('customers').update({ cans_held: newBalance }).eq('id', adj.customer_id);
+      await supabase.from('customers').update({ cans_held: newBalance, updated_at: new Date().toISOString() }).eq('id', adj.customer_id);
+    }
+  },
+
+  async adjustCompanyCans(adj: {
+    adjustment_mode?: 'set_total' | 'delta' | 'set_breakdown';
+    target_total?: number;
+    delta?: number;
+    empty_cans?: number;
+    damaged_cans?: number;
+    lost_cans?: number;
+    reason: string;
+    notes?: string;
+  }): Promise<void> {
+    assertRole(['Owner', 'Manager'], 'adjust total company can physical assets');
+    const supabase = getSupabaseClient();
+    const user = getCurrentAuthUser();
+
+    if (supabase) {
+      const { data: invRow } = await supabase.from('inventory').select('*').eq('product_id', 'prod-19l-can').maybeSingle();
+      const { data: custs } = await supabase.from('customers').select('cans_held');
+      const withCustomers = (custs || []).reduce((s, c) => s + (Number(c.cans_held) || 0), 0);
+      const filled = Number(invRow?.filled_stock || 0);
+      const curEmpty = Number(invRow?.empty_cans || 0);
+      const curDamaged = Number(invRow?.damaged_cans || 0);
+      const curLost = Number(invRow?.lost_cans || 0);
+      const curTotal = filled + curEmpty + withCustomers + curDamaged + curLost;
+
+      let newEmpty = curEmpty;
+      let newDamaged = curDamaged;
+      let newLost = curLost;
+
+      if (adj.adjustment_mode === 'set_total' && adj.target_total !== undefined) {
+        const others = filled + withCustomers + curDamaged + curLost;
+        newEmpty = Math.max(0, adj.target_total - others);
+      } else if (adj.adjustment_mode === 'delta' && adj.delta !== undefined) {
+        newEmpty = Math.max(0, curEmpty + adj.delta);
+      } else if (adj.adjustment_mode === 'set_breakdown') {
+        if (adj.empty_cans !== undefined) newEmpty = Math.max(0, adj.empty_cans);
+        if (adj.damaged_cans !== undefined) newDamaged = Math.max(0, adj.damaged_cans);
+        if (adj.lost_cans !== undefined) newLost = Math.max(0, adj.lost_cans);
+      }
+
+      const newTotal = filled + newEmpty + withCustomers + newDamaged + newLost;
+      const totalDelta = newTotal - curTotal;
+
+      await supabase.from('inventory').update({
+        empty_cans: newEmpty,
+        damaged_cans: newDamaged,
+        lost_cans: newLost,
+        updated_at: new Date().toISOString(),
+      }).eq('product_id', 'prod-19l-can');
+
+      await supabase.from('inventory_movements').insert({
+        product_id: 'prod-19l-can',
+        movement_type: totalDelta >= 0 ? 'company_cans_addition' : 'company_cans_reduction',
+        stock_type: 'empty',
+        quantity: totalDelta,
+        previous_stock: curTotal,
+        new_stock: newTotal,
+        reason: `${adj.reason}${adj.notes ? ` - ${adj.notes}` : ''}`,
+        reference_type: 'company_asset_adjustment',
+        user_id: user.id || null,
+      });
     }
   },
 

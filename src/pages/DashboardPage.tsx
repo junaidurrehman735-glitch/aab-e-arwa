@@ -444,13 +444,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
             <span>New Order</span>
           </button>
           <button
-            onClick={() => onNavigate('production')}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer border border-slate-700"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Record Filling</span>
-          </button>
-          <button
             onClick={fetchDashboard}
             className="p-1.5 text-slate-400 hover:text-white bg-slate-800/80 rounded-lg transition-colors cursor-pointer border border-slate-700"
             title="Refresh statistics"

@@ -18,6 +18,7 @@ import type {
   CustomerCanMovement,
   DashboardSummary,
 } from '../types/index.ts';
+import { getPakistanDateRange, isTimestampInRange, safePercentage, type DashboardPeriod } from './pakistanDate.ts';
 
 // -----------------------------------------------------------------------------
 // Current Authenticated User & Role Context Helper
@@ -2135,9 +2136,13 @@ export const SupabaseDataService = {
   },
 
   // 14. DASHBOARD AGGREGATED STATS
-  async getDashboardSummary(): Promise<DashboardSummary> {
+  async getDashboardSummary(periodParam?: string): Promise<DashboardSummary> {
     const user = getCurrentAuthUser();
     const isOwner = user.role_name === 'Owner' || user.role_id === 'role-owner';
+    const period: DashboardPeriod = (['today', 'yesterday', 'last7days', 'last30days', 'all_time'].includes(periodParam as any)
+      ? periodParam
+      : 'today') as DashboardPeriod;
+    const dateRange = getPakistanDateRange(period);
 
     const cans = await this.getCanSummary();
     const deliveries = await this.getDeliveries();
@@ -2147,46 +2152,29 @@ export const SupabaseDataService = {
     const payments = await this.getPayments().catch(() => []);
     const expenses = await this.getExpenses().catch(() => []);
 
-    const deliveriesDelivered = deliveries.filter(d => d.status === 'delivered').length;
-    const deliveriesInTransit = deliveries.filter(d => d.status === 'out_for_delivery' || d.status === 'assigned').length;
-    const deliveriesPending = deliveries.filter(d => (d.status as string) === 'assigned' || (d.status as string) === 'rescheduled' || (d.status as string) === 'pending').length;
+    // Filter date-dependent collections strictly by Pakistan date boundaries
+    const periodOrders = orders.filter(o => isTimestampInRange(o.created_at || o.delivery_date, dateRange));
+    const periodDeliveries = deliveries.filter(d => isTimestampInRange(d.delivery_date || d.created_at, dateRange));
+    const periodPayments = payments.filter(p => isTimestampInRange(p.payment_date || p.created_at, dateRange));
+    const periodExpensesList = expenses.filter(e => isTimestampInRange(e.expense_date || (e as any).date || e.created_at, dateRange));
 
+    const deliveriesDelivered = periodDeliveries.filter(d => d.status === 'delivered').length;
+    const deliveriesInTransit = periodDeliveries.filter(d => d.status === 'out_for_delivery' || d.status === 'assigned').length;
+    const deliveriesPending = periodDeliveries.filter(d => (d.status as string) === 'assigned' || (d.status as string) === 'rescheduled' || (d.status as string) === 'pending').length;
+
+    // Static current values (NEVER DATE-FILTERED)
     const totalReceivables = isOwner ? customers.reduce((sum, c) => sum + (Number(c.outstanding_balance) || 0), 0) : 0;
+    const withCustomers = Number(cans.customerHeld) || customers.reduce((sum, c) => sum + (Number(c.cans_held) || 0), 0);
+    const filledStock = Number(cans.factoryFilled) || products.reduce((sum, p) => sum + (Number(p.filled_stock) || 0), 0);
+    const emptyCansStock = Number(cans.factoryEmpty) || products.reduce((sum, p) => sum + (Number(p.empty_cans) || 0), 0);
 
-    const isDateToday = (dateVal?: string | null): boolean => {
-      if (!dateVal) return false;
-      const str = String(dateVal).trim();
-      if (!str) return false;
-      const now = new Date();
-      const utcToday = now.toISOString().slice(0, 10);
-      const localToday = now.toLocaleDateString('en-CA');
-      if (str.startsWith(utcToday) || str.startsWith(localToday)) return true;
-      try {
-        const parsed = new Date(str);
-        if (!isNaN(parsed.getTime())) {
-          const parsedUtc = parsed.toISOString().slice(0, 10);
-          const parsedLocal = parsed.toLocaleDateString('en-CA');
-          return parsedUtc === utcToday || parsedUtc === localToday || parsedLocal === utcToday || parsedLocal === localToday;
-        }
-      } catch (_) {}
-      return false;
-    };
+    const periodSales = isOwner ? periodOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0) : 0;
 
-    const todayOrders = orders.filter(o =>
-      isDateToday(o.created_at) ||
-      isDateToday(o.delivery_date) ||
-      isDateToday((o as any).completed_at) ||
-      isDateToday((o as any).updated_at)
-    );
-    const todaySales = isOwner ? todayOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0) : 0;
-
-    // Calculate Cash Collected / Today's Received Payments
-    const todayPayments = payments.filter(p => isDateToday(p.payment_date) || isDateToday(p.created_at));
-    let todayCollections = 0;
+    // Calculate Cash Collected in period
+    let periodCollections = 0;
     const coveredOrderIds = new Set<string>();
-
-    for (const p of todayPayments) {
-      todayCollections += Number(p.amount) || 0;
+    for (const p of periodPayments) {
+      periodCollections += Number(p.amount) || 0;
       if (p.order_id) coveredOrderIds.add(String(p.order_id));
       if (p.delivery_id) {
         const del = deliveries.find(d => String(d.id) === String(p.delivery_id));
@@ -2194,8 +2182,7 @@ export const SupabaseDataService = {
       }
     }
 
-    // Include completed orders marked as Cashpaid / paid that do not yet have an explicit payment ledger record
-    for (const o of todayOrders) {
+    for (const o of periodOrders) {
       const st = String(o.order_status || (o as any).status || '').toLowerCase().trim();
       const ps = String(o.payment_status || '').toLowerCase().trim();
       const pm = String((o as any).payment_method || '').toLowerCase().trim();
@@ -2213,46 +2200,75 @@ export const SupabaseDataService = {
         const ordId = String(o.id || '');
         const ordNum = String(o.order_number || '');
         if (!coveredOrderIds.has(ordId) && (!ordNum || !coveredOrderIds.has(ordNum))) {
-          todayCollections += Number(o.total_amount) || 0;
+          periodCollections += Number(o.total_amount) || 0;
           coveredOrderIds.add(ordId);
         }
       }
     }
 
-    const todayExpensesList = expenses.filter(e => isDateToday(e.expense_date) || isDateToday(e.created_at));
-    const todayExpenses = isOwner ? todayExpensesList.reduce((sum, e) => sum + (Number(e.amount) || 0), 0) : 0;
+    const periodExpenses = isOwner ? periodExpensesList.reduce((sum, e) => sum + (Number(e.amount) || 0), 0) : 0;
+    const periodProfit = isOwner ? periodSales - periodExpenses : 0;
 
-    const currentMonthStr = new Date().toISOString().slice(0, 7);
-    const monthOrders = orders.filter(o => o.created_at && String(o.created_at).slice(0, 7) === currentMonthStr);
-    const monthlyRevenue = isOwner ? monthOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0) : 0;
+    // Period-adapted Sales trend (calculated in Asia/Karachi time)
+    const tz = 'Asia/Karachi';
+    const salesTrend: { day: string; date: string; amount: number; displayLabel: string }[] = [];
+    const trendLength = period === 'last30days' ? 30 : 7;
+    for (let i = trendLength - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const pkDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(d);
+      const dayName = d.toLocaleDateString('en-US', { weekday: 'short', timeZone: tz });
 
-    const monthExpensesList = expenses.filter(e => (e.expense_date && String(e.expense_date).slice(0, 7) === currentMonthStr) || (e.created_at && String(e.created_at).slice(0, 7) === currentMonthStr));
-    const monthlyExpenses = isOwner ? monthExpensesList.reduce((sum, e) => sum + (Number(e.amount) || 0), 0) : 0;
-    const monthlyProfit = isOwner ? monthlyRevenue - monthlyExpenses : 0;
+      const [y, m, dayNum] = pkDateStr.split('-').map(Number);
+      const dayStart = Date.UTC(y, m - 1, dayNum, -5, 0, 0, 0);
+      const dayEnd = Date.UTC(y, m - 1, dayNum, 18, 59, 59, 999);
 
-    const filledStock = Number(cans.factoryFilled) || products.reduce((sum, p) => sum + (Number(p.filled_stock) || 0), 0);
-    const emptyCansStock = Number(cans.factoryEmpty) || products.reduce((sum, p) => sum + (Number(p.empty_cans) || 0), 0);
-    const cansWithCustomers = Number(cans.customerHeld) || customers.reduce((sum, c) => sum + (Number(c.cans_held) || 0), 0);
+      const daySales = isOwner
+        ? orders
+            .filter(o => {
+              if (!o.created_at) return false;
+              const t = new Date(o.created_at).getTime();
+              return t >= dayStart && t <= dayEnd;
+            })
+            .reduce((s, o) => s + (Number(o.total_amount) || 0), 0)
+        : 0;
+
+      salesTrend.push({
+        day: dayName,
+        date: pkDateStr,
+        amount: daySales,
+        displayLabel: trendLength > 7 ? `${m}/${dayNum}` : dayName,
+      });
+    }
 
     const kpis = {
-      todaySales,
-      todayCollections,
-      todayExpenses,
+      todaySales: periodSales,
+      todayCollections: periodCollections,
+      todayExpenses: periodExpenses,
       totalReceivables,
       filledStock,
       emptyCansStock,
-      cansWithCustomers,
-      deliveriesToday: deliveries.length,
+      cansWithCustomers: withCustomers,
+      deliveriesToday: periodDeliveries.length,
       deliveriesDelivered,
       deliveriesInTransit,
       deliveriesPending,
-      monthlyRevenue,
-      monthlyExpenses,
-      monthlyProfit,
+      monthlyRevenue: periodSales,
+      monthlyExpenses: periodExpenses,
+      monthlyProfit: periodProfit,
+      periodLabel: dateRange.label,
+      periodSales,
+      periodCollections,
+      periodExpenses,
+      periodProfit,
+      periodDeliveriesToday: periodDeliveries.length,
+      periodDeliveriesDelivered: deliveriesDelivered,
+      periodDeliveriesInTransit: deliveriesInTransit,
+      periodDeliveriesPending: deliveriesPending,
     };
 
-    const recentDeliveries = deliveries.slice(0, 5);
-    const recentOrders = orders.slice(0, 5);
+    const recentDeliveries = periodDeliveries.slice(0, 5);
+    const recentOrders = periodOrders.slice(0, 5);
     const lowStock = products
       .filter(p => (Number(p.filled_stock) || 0) < 10 && products.length > 0)
       .map(p => ({
@@ -2262,36 +2278,6 @@ export const SupabaseDataService = {
         empty_cans: Number(p.empty_cans) || 0,
       }));
     const topDebtors = isOwner ? customers.filter(c => (Number(c.outstanding_balance) || 0) > 0).slice(0, 5) : [];
-
-    const salesTrend: { day: string; date: string; amount: number }[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const dayNum = String(d.getDate()).padStart(2, '0');
-      const localDateStr = `${y}-${m}-${dayNum}`;
-      const utcDateStr = d.toISOString().slice(0, 10);
-      const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
-      const daySales = isOwner
-        ? orders
-            .filter(o => {
-              if (!o.created_at) return false;
-              const str = String(o.created_at).trim();
-              if (str.slice(0, 10) === localDateStr || str.slice(0, 10) === utcDateStr) return true;
-              try {
-                const parsed = new Date(str);
-                if (!isNaN(parsed.getTime())) {
-                  const parsedLocal = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
-                  return parsedLocal === localDateStr || parsed.toISOString().slice(0, 10) === utcDateStr;
-                }
-              } catch (_) {}
-              return false;
-            })
-            .reduce((s, o) => s + (Number(o.total_amount) || 0), 0)
-        : 0;
-      salesTrend.push({ day: dayName, date: localDateStr, amount: daySales });
-    }
 
     return {
       kpis,

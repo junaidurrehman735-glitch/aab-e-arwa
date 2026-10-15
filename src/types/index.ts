@@ -354,10 +354,19 @@ export interface DashboardSummary {
     monthlyRevenue: number;
     monthlyExpenses: number;
     monthlyProfit: number;
+    periodLabel?: string;
+    periodSales?: number;
+    periodCollections?: number;
+    periodExpenses?: number;
+    periodProfit?: number;
+    periodDeliveriesToday?: number;
+    periodDeliveriesDelivered?: number;
+    periodDeliveriesInTransit?: number;
+    periodDeliveriesPending?: number;
   };
   recentDeliveries: Delivery[];
   recentOrders: Order[];
   lowStock: { name: string; size: string; filled_stock: number; empty_cans: number }[];
   topDebtors: Customer[];
-  salesTrend: { day: string; date?: string; amount: number }[];
+  salesTrend: { day: string; date?: string; amount: number; displayLabel?: string }[];
 }

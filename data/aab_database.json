@@ -460,13 +460,13 @@
       "cash_status": "Cash on Delivery",
       "credit_limit": 0,
       "outstanding_balance": 0,
-      "cans_held": 2,
+      "cans_held": 4,
       "net_deposit_amount": 0,
       "notes": "",
       "delivery_instructions": "",
       "status": "active",
       "created_at": "2026-10-13T15:33:52.599+00:00",
-      "updated_at": "2026-10-13T15:33:52.688018+00:00"
+      "updated_at": "2026-10-15T00:12:22.826+00:00"
     },
     {
       "id": "cust-1791901944676-mrdyd",
@@ -512,7 +512,7 @@
       "delivery_instructions": "",
       "status": "active",
       "created_at": "2026-10-12T17:31:59.726+00:00",
-      "updated_at": "2026-10-14T15:06:30.450Z"
+      "updated_at": "2026-10-14T15:06:30.45+00:00"
     },
     {
       "id": "cust-1791826319175",
@@ -736,13 +736,13 @@
       "cash_status": "Cash on Delivery",
       "credit_limit": 0,
       "outstanding_balance": 0,
-      "cans_held": 0,
+      "cans_held": 2,
       "net_deposit_amount": 0,
       "notes": "",
       "delivery_instructions": "",
       "status": "active",
       "created_at": "2026-10-11T21:17:41.009+00:00",
-      "updated_at": "2026-10-11T21:17:41.59407+00:00"
+      "updated_at": "2026-10-15T00:10:17.141+00:00"
     },
     {
       "id": "cust-1791753446040",
@@ -889,6 +889,32 @@
   ],
   "production_records": [],
   "orders": [
+    {
+      "id": "ord-1792024480066",
+      "order_number": "ORD-480066",
+      "customer_id": "cust-1791989224727-8192d",
+      "total_amount": 750,
+      "payment_type": "Cash",
+      "payment_status": "pending",
+      "order_status": "confirmed",
+      "delivery_date": "2026-10-15",
+      "delivery_address": "",
+      "notes": "",
+      "created_by": "Owner",
+      "created_at": "2026-10-15T00:34:40.066Z",
+      "customer_name": "Auto Flow Cust 1427 (Verified)",
+      "customer_phone": "03003481118",
+      "customer_area": "Chiltan Scheme Airport Road",
+      "items": [
+        {
+          "product_id": "prod-19l-can",
+          "product_name": "19L Water Bottle",
+          "quantity": 3,
+          "unit_price": 250,
+          "total_price": 750
+        }
+      ]
+    },
     {
       "id": "ord-1791989225912",
       "order_number": "ORD-225912",
@@ -1860,6 +1886,14 @@
       "quantity": 2,
       "unit_price": 240,
       "total_price": 480
+    },
+    {
+      "id": "oi-1792024480730-9w5dl",
+      "order_id": "ord-1792024480066",
+      "product_id": "prod-19l-can",
+      "quantity": 3,
+      "unit_price": 250,
+      "total_price": 750
     }
   ],
   "deliveries": [
@@ -3177,6 +3211,25 @@
   "suppliers": [],
   "supplier_transactions": [],
   "audit_logs": [
+    {
+      "id": "aud-1792024480732-jqjv8f",
+      "user_id": "owner-uuid-001",
+      "user_name": "Aab-e-Arwa Owner",
+      "user_role": "Owner",
+      "action": "CREATE_ORDER",
+      "module": "orders",
+      "record_ref": "ord-1792024480066",
+      "details": "Created order #ORD-480066 for customer \"Auto Flow Cust 1427 (Verified)\" | Total: PKR 750 | Delivery: 2026-10-15",
+      "old_value": null,
+      "new_value": {
+        "order_number": "ORD-480066",
+        "total_amount": 750,
+        "delivery_date": "2026-10-15",
+        "items_count": 1
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-15T00:34:40.732Z"
+    },
     {
       "id": "aud-1791990391305-w3cq9a",
       "user_id": "owner-uuid-001",

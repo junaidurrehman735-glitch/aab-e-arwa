@@ -267,7 +267,9 @@ async function handleSupabaseRoute<T>(method: string, endpoint: string, body?: a
 
   // 15. DASHBOARD
   if (pathParts[0] === 'dashboard') {
-    return (await SupabaseDataService.getDashboardSummary()) as unknown as T;
+    const urlParams = new URLSearchParams(endpoint.includes('?') ? endpoint.split('?')[1] : '');
+    const period = urlParams.get('period') || undefined;
+    return (await SupabaseDataService.getDashboardSummary(period)) as unknown as T;
   }
 
   // 16. SETTINGS

@@ -189,7 +189,7 @@ export interface Order {
   total_amount: number;
   payment_type: 'Cash' | 'Credit';
   payment_status: 'pending' | 'paid' | 'partially_paid' | 'credit' | 'overdue';
-  order_status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
+  order_status: 'pending' | 'confirmed' | 'delivered' | 'completed' | 'cancelled';
   delivery_date: string;
   delivery_address: string;
   notes?: string;

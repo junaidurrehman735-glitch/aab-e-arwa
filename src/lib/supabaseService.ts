@@ -19,6 +19,7 @@ import type {
   DashboardSummary,
 } from '../types/index.ts';
 import { getPakistanDateRange, isTimestampInRange, safePercentage, type DashboardPeriod } from './pakistanDate.ts';
+import { getAssignedDriverForArea } from './deliveryAssignment.ts';
 
 // -----------------------------------------------------------------------------
 // Current Authenticated User & Role Context Helper
@@ -1275,19 +1276,29 @@ export const SupabaseDataService = {
         });
       }
       // Auto-create delivery record
+      let customerArea = '';
+      try {
+        const { data: cust } = await supabase.from('customers').select('area').eq('id', orderData.customer_id).maybeSingle();
+        if (cust) customerArea = cust.area;
+      } catch (_) {}
+      const staffList = await this.getStaff().catch(() => getMem('users') || []);
+      const autoAssigned = getAssignedDriverForArea(customerArea, staffList);
+
       const delId = `del-${Date.now()}`;
       await supabase.from('deliveries').insert({
         id: delId,
         delivery_number: `DEL-${Date.now().toString().slice(-6)}`,
         order_id: id,
         customer_id: orderData.customer_id,
-        vehicle: 'Van #1',
+        driver_id: autoAssigned.driver_id,
+        vehicle: autoAssigned.vehicle,
         delivery_date: orderData.delivery_date,
         delivery_time: 'Morning',
         status: 'assigned',
         empty_cans_returned: 0,
         payment_collected: 0,
         payment_method: orderData.payment_type || 'Cash',
+        notes: orderData.notes || '',
       });
     }
 
@@ -1298,6 +1309,59 @@ export const SupabaseDataService = {
     return { id, orderNumber };
   },
 
+  async updateOrderStatus(id: string, status?: string, paymentStatus?: string): Promise<{ success: boolean }> {
+    assertRole(['Owner', 'Manager'], 'update order status');
+    const supabase = getSupabaseClient();
+    const nowIso = new Date().toISOString();
+
+    if (supabase) {
+      const updates: any = { updated_at: nowIso };
+      if (status) updates.order_status = status;
+      if (paymentStatus) updates.payment_status = paymentStatus;
+      await supabase.from('orders').update(updates).eq('id', id);
+
+      // AUTOMATIC DELIVERY ASSIGNMENT: when order is confirmed, ensure exactly ONE delivery record is linked & assigned
+      if (status === 'confirmed') {
+        const { data: existingDel } = await supabase.from('deliveries').select('id').eq('order_id', id).maybeSingle();
+        if (!existingDel) {
+          const { data: ord } = await supabase.from('orders').select('*, customer:customers(area, address, name, phone)').eq('id', id).maybeSingle();
+          if (ord) {
+            const staffList = await this.getStaff().catch(() => getMem('users') || []);
+            const autoAssigned = getAssignedDriverForArea(ord.customer?.area || '', staffList);
+            const deliveryId = `del-${Date.now()}`;
+            const deliveryNumber = `DEL-${Date.now().toString().slice(-6)}`;
+            await supabase.from('deliveries').insert({
+              id: deliveryId,
+              delivery_number: deliveryNumber,
+              order_id: id,
+              customer_id: ord.customer_id,
+              driver_id: autoAssigned.driver_id,
+              vehicle: autoAssigned.vehicle,
+              delivery_date: ord.delivery_date || nowIso.split('T')[0],
+              delivery_time: 'Morning',
+              status: 'assigned',
+              empty_cans_returned: 0,
+              payment_collected: 0,
+              payment_method: ord.payment_type || 'Cash',
+              notes: ord.notes || '',
+              created_at: nowIso,
+            });
+          }
+        }
+      }
+    }
+
+    const currentOrders = getMem('orders');
+    const ord = currentOrders.find((o: any) => o.id === id);
+    if (ord) {
+      if (status) ord.order_status = status;
+      if (paymentStatus) ord.payment_status = paymentStatus;
+      saveMem('orders', currentOrders);
+    }
+
+    return { success: true };
+  },
+
   // 8. DELIVERIES & FLEET LOGISTICS
   async getDeliveries(): Promise<Delivery[]> {
     const currentUser = getCurrentAuthUser();
@@ -1306,7 +1370,31 @@ export const SupabaseDataService = {
     let deliveries: Delivery[] = [];
 
     if (supabase) {
-      let query = supabase.from('deliveries').select('*, customer:customers(name, phone, area, address), order:orders(total_amount, order_number)').order('created_at', { ascending: false });
+      let query = supabase
+        .from('deliveries')
+        .select(`
+          *,
+          customer:customers (
+            name,
+            phone,
+            area,
+            address
+          ),
+          order:orders (
+            total_amount,
+            order_number,
+            notes
+          ),
+          items:delivery_items (
+            id,
+            product_id,
+            quantity,
+            product:products (
+              name
+            )
+          )
+        `)
+        .order('created_at', { ascending: false });
 
       // Delivery Boy can ONLY access assigned deliveries
       if (currentUser.role_id === 'role-delivery' || currentUser.role_name === 'Delivery Boy') {
@@ -1315,13 +1403,21 @@ export const SupabaseDataService = {
 
       const { data, error } = await query;
       if (!error && data) {
+        const staffList = await this.getStaff().catch(() => getMem('users') || []);
         deliveries = data.map(d => ({
           ...d,
           customer_name: d.customer?.name || '',
           customer_phone: d.customer?.phone || '',
           customer_address: d.customer?.address || '',
           customer_area: d.customer?.area || '',
+          order_number: d.order?.order_number || '',
           total_amount: d.order?.total_amount || 0,
+          notes: d.notes || d.order?.notes || '',
+          driver_name: d.driver_id ? (staffList.find(s => s.id === d.driver_id)?.name || 'Assigned Driver') : 'Unassigned',
+          items: (d.items || []).map((it: any) => ({
+            ...it,
+            product_name: it.product?.name || '19L Water Bottle',
+          })),
         }));
       }
     }
@@ -1414,10 +1510,10 @@ export const SupabaseDataService = {
         updated_at: nowIso,
       }).eq('id', id);
 
-      // 4. Update linked order status to completed
+      // 4. Update linked order status to delivered
       if (del.order_id) {
         await supabase.from('orders').update({
-          order_status: 'completed',
+          order_status: 'delivered',
           payment_status: completionData.payment_collected >= orderTotal ? 'paid' : (completionData.payment_collected > 0 ? 'partially_paid' : 'pending'),
           updated_at: nowIso,
         }).eq('id', del.order_id);

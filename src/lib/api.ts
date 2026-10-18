@@ -183,6 +183,12 @@ async function handleSupabaseRoute<T>(method: string, endpoint: string, body?: a
 
   // 8. ORDERS
   if (pathParts[0] === 'orders') {
+    if (pathParts[2] === 'status' && (method === 'PUT' || method === 'PATCH')) {
+      return (await SupabaseDataService.updateOrderStatus(pathParts[1], body?.status, body?.payment_status)) as unknown as T;
+    }
+    if (pathParts[1] && (method === 'PUT' || method === 'PATCH')) {
+      return (await SupabaseDataService.updateOrderStatus(pathParts[1], body?.order_status || body?.status, body?.payment_status)) as unknown as T;
+    }
     if (method === 'GET') {
       return (await SupabaseDataService.getOrders()) as unknown as T;
     }

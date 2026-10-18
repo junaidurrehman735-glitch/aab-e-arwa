@@ -14,6 +14,7 @@ import {
 } from './db.ts';
 import type { User, Customer, Product, Delivery, Order, Permission, AuditLog } from '../types/index.ts';
 import { getPakistanDateRange, isTimestampInRange, type DashboardPeriod } from '../lib/pakistanDate.ts';
+import { getAssignedDriverForArea } from '../lib/deliveryAssignment.ts';
 
 export const apiRouter = Router();
 
@@ -1810,49 +1811,67 @@ apiRouter.post('/orders', async (req: Request, res: Response) => {
           total_price: Number(it.quantity || 1) * Number(it.unit_price || 0),
         }));
 
-        const deliveryId = `del-${Date.now()}`;
-        const deliveryNumber = `DEL-${Date.now().toString().slice(-6)}`;
-        const cleanDeliveryRow = {
-          id: deliveryId,
-          delivery_number: deliveryNumber,
-          order_id: id,
-          customer_id: customerId,
-          driver_id: orderData.driver_id || null,
-          vehicle: orderData.vehicle || 'Van #1',
-          delivery_date: deliveryDate,
-          delivery_time: orderData.delivery_time || 'Morning',
-          status: 'assigned',
-          empty_cans_returned: 0,
-          payment_collected: 0,
-          payment_method: orderData.payment_type || 'Cash',
-          notes: orderData.notes || '',
-          created_at: nowIso,
-        };
+        const cust = db.customers.find(c => c.id === customerId);
+        const customerArea = orderData.customer_area || cust?.area || '';
+        const autoAssigned = getAssignedDriverForArea(customerArea, db.users);
+        const driverId = orderData.driver_id || autoAssigned.driver_id;
+        const vehicle = orderData.vehicle || autoAssigned.vehicle;
 
-        const delItems = orderData.items.map((it: any) => ({
-          id: `ditem-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          delivery_id: deliveryId,
-          product_id: it.product_id,
-          quantity: Number(it.quantity || 1),
-        }));
+        const { data: existingDel } = await supabase.from('deliveries').select('id').eq('order_id', id).maybeSingle();
 
-        // Execute items & delivery in parallel for fast performance
-        await Promise.all([
-          supabase.from('order_items').insert(cleanItems),
-          supabase.from('deliveries').insert(cleanDeliveryRow),
-          supabase.from('delivery_items').insert(delItems),
-        ]);
+        if (!existingDel) {
+          const deliveryId = `del-${Date.now()}`;
+          const deliveryNumber = `DEL-${Date.now().toString().slice(-6)}`;
+          const cleanDeliveryRow = {
+            id: deliveryId,
+            delivery_number: deliveryNumber,
+            order_id: id,
+            customer_id: customerId,
+            driver_id: driverId,
+            vehicle: vehicle,
+            delivery_date: deliveryDate,
+            delivery_time: orderData.delivery_time || 'Morning',
+            status: 'assigned',
+            empty_cans_returned: 0,
+            payment_collected: 0,
+            payment_method: orderData.payment_type || 'Cash',
+            notes: orderData.notes || '',
+            created_at: nowIso,
+          };
 
-        console.log(`[ORDER] Created & saved in Supabase: #${orderNumber} (${id}) with Delivery: #${deliveryNumber}`);
+          const delItems = orderData.items.map((it: any) => ({
+            id: `ditem-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            delivery_id: deliveryId,
+            product_id: it.product_id,
+            quantity: Number(it.quantity || 1),
+          }));
+
+          // Execute items & delivery in parallel for fast performance
+          await Promise.all([
+            supabase.from('order_items').insert(cleanItems),
+            supabase.from('deliveries').insert(cleanDeliveryRow),
+            supabase.from('delivery_items').insert(delItems),
+          ]);
+
+          console.log(`[ORDER] Created in Supabase: #${orderNumber} (${id}) with Auto-assigned Delivery: #${deliveryNumber} to driver ${driverId}`);
+        } else {
+          await supabase.from('order_items').insert(cleanItems);
+        }
       }
 
       // Keep central database aligned
       const cust = db.customers.find(c => c.id === customerId);
+      const customerArea = orderData.customer_area || cust?.area || '';
+      const autoAssigned = getAssignedDriverForArea(customerArea, db.users);
+      const driverId = orderData.driver_id || autoAssigned.driver_id;
+      const driverName = autoAssigned.driver_name;
+      const vehicle = orderData.vehicle || autoAssigned.vehicle;
+
       const newOrderFull = {
         ...cleanOrderRow,
         customer_name: cust?.name || orderData.customer_name || '',
         customer_phone: cust?.phone || orderData.customer_phone || '',
-        customer_area: cust?.area || orderData.customer_area || '',
+        customer_area: customerArea,
         items: orderData.items || [],
         created_at: nowIso,
       };
@@ -1866,6 +1885,35 @@ apiRouter.post('/orders', async (req: Request, res: Response) => {
           quantity: it.quantity,
           unit_price: it.unit_price,
           total_price: it.quantity * it.unit_price,
+        });
+      }
+
+      // Link delivery record in central database if not already present
+      const existingDelInDb = db.deliveries.find(d => d.order_id === id);
+      if (!existingDelInDb) {
+        const deliveryId = `del-${Date.now()}`;
+        const deliveryNumber = `DEL-${Date.now().toString().slice(-6)}`;
+        db.deliveries.unshift({
+          id: deliveryId,
+          delivery_number: deliveryNumber,
+          order_id: id,
+          customer_id: customerId,
+          customer_name: cust?.name || orderData.customer_name || '',
+          customer_phone: cust?.phone || orderData.customer_phone || '',
+          customer_address: orderData.delivery_address || cust?.address || '',
+          customer_area: customerArea,
+          driver_id: driverId,
+          driver_name: driverName,
+          vehicle: vehicle,
+          delivery_date: deliveryDate,
+          delivery_time: orderData.delivery_time || 'Morning',
+          status: 'assigned',
+          empty_cans_returned: 0,
+          payment_collected: 0,
+          payment_method: orderData.payment_type || 'Cash',
+          notes: orderData.notes || '',
+          items: orderData.items || [],
+          created_at: nowIso,
         });
       }
 
@@ -1961,9 +2009,83 @@ apiRouter.put('/orders/:id/status', async (req: Request, res: Response) => {
       saveDatabase(db);
     }
 
+    // AUTOMATIC DELIVERY ASSIGNMENT: when order is confirmed, ensure exactly ONE delivery record is linked & assigned
+    if (status === 'confirmed') {
+      const nowIso = new Date().toISOString();
+      const customerId = ord?.customer_id;
+      const cust = db.customers.find(c => c.id === customerId);
+      const customerArea = ord?.customer_area || cust?.area || '';
+      const autoAssigned = getAssignedDriverForArea(customerArea, db.users);
+
+      if (supabase) {
+        const { data: existingDel } = await supabase.from('deliveries').select('id, status').eq('order_id', id).maybeSingle();
+        if (!existingDel) {
+          const deliveryId = `del-${Date.now()}`;
+          const deliveryNumber = `DEL-${Date.now().toString().slice(-6)}`;
+          await supabase.from('deliveries').insert({
+            id: deliveryId,
+            delivery_number: deliveryNumber,
+            order_id: id,
+            customer_id: customerId,
+            driver_id: autoAssigned.driver_id,
+            vehicle: autoAssigned.vehicle,
+            delivery_date: ord?.delivery_date || nowIso.split('T')[0],
+            delivery_time: 'Morning',
+            status: 'assigned',
+            empty_cans_returned: 0,
+            payment_collected: 0,
+            payment_method: ord?.payment_type || 'Cash',
+            notes: ord?.notes || '',
+            created_at: nowIso,
+          });
+
+          // Fetch items for order
+          const { data: ordItems } = await supabase.from('order_items').select('*').eq('order_id', id);
+          if (ordItems && ordItems.length > 0) {
+            const delItems = ordItems.map((it: any) => ({
+              id: `ditem-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              delivery_id: deliveryId,
+              product_id: it.product_id,
+              quantity: Number(it.quantity || 1),
+            }));
+            await supabase.from('delivery_items').insert(delItems);
+          }
+        }
+      }
+
+      const existingDelInDb = db.deliveries.find(d => d.order_id === id);
+      if (!existingDelInDb && ord) {
+        const deliveryId = `del-${Date.now()}`;
+        const deliveryNumber = `DEL-${Date.now().toString().slice(-6)}`;
+        db.deliveries.unshift({
+          id: deliveryId,
+          delivery_number: deliveryNumber,
+          order_id: id,
+          customer_id: customerId || '',
+          customer_name: ord.customer_name || cust?.name || '',
+          customer_phone: ord.customer_phone || cust?.phone || '',
+          customer_address: ord.delivery_address || cust?.address || '',
+          customer_area: customerArea,
+          driver_id: autoAssigned.driver_id,
+          driver_name: autoAssigned.driver_name,
+          vehicle: autoAssigned.vehicle,
+          delivery_date: ord.delivery_date || nowIso.split('T')[0],
+          delivery_time: 'Morning',
+          status: 'assigned',
+          empty_cans_returned: 0,
+          payment_collected: 0,
+          payment_method: ord.payment_type || 'Cash',
+          notes: ord.notes || '',
+          items: ord.items || [],
+          created_at: nowIso,
+        });
+        saveDatabase(db);
+      }
+    }
+
     let actionType = 'UPDATE_ORDER';
     if (status === 'confirmed') actionType = 'CONFIRM_ORDER';
-    else if (status === 'out_for_delivery') actionType = 'DISPATCH_ORDER';
+    else if (status === 'out_for_delivery') actionType = 'OUT_FOR_DELIVERY';
     else if (status === 'completed' || status === 'delivered') actionType = 'COMPLETE_ORDER';
     else if (status === 'cancelled') actionType = 'CANCEL_ORDER';
 
@@ -2035,10 +2157,18 @@ apiRouter.put('/orders/:id', async (req: Request, res: Response) => {
 
 apiRouter.get('/deliveries', async (req: Request, res: Response) => {
   const supabase = getServerSupabase();
+  const authUser = await getAuthUserFromRequest(req);
+  const isDeliveryBoy = authUser && (authUser.role_name === 'Delivery Boy' || authUser.role_id === 'role-delivery');
+
   const areaFilter = (req.query.area as string || '').trim();
   const statusFilter = (req.query.status as string || '').trim();
-  const driverFilter = (req.query.driverId as string || '').trim();
+  let driverFilter = (req.query.driverId as string || '').trim();
   const dateFilter = (req.query.date as string || '').trim();
+
+  // If a Delivery Boy logs in, restrict deliveries directly to their assigned driver ID
+  if (isDeliveryBoy) {
+    driverFilter = authUser.id;
+  }
 
   let deliveries: any[] = [];
   let fetchedFromSupabase = false;
@@ -2093,20 +2223,33 @@ apiRouter.get('/deliveries', async (req: Request, res: Response) => {
           staffMap[u.id] = u.name;
         });
 
-        deliveries = data.map((d: any) => ({
-          ...d,
-          customer_name: d.customer?.name || '',
-          customer_phone: d.customer?.phone || '',
-          customer_address: d.customer?.address || '',
-          customer_area: d.customer?.area || '',
-          order_number: d.order?.order_number || '',
-          total_amount: d.order?.total_amount || 0,
-          driver_name: d.driver_id ? (staffMap[d.driver_id] || 'Assigned Driver') : 'Unassigned',
-          items: (d.items || []).map((it: any) => ({
+        deliveries = data.map((d: any) => {
+          let items = (d.items || []).map((it: any) => ({
             ...it,
-            product_name: it.product?.name || '',
-          })),
-        }));
+            product_name: it.product?.name || it.product_name || '19L Water Bottle',
+          }));
+          if (items.length === 0 && d.order_id) {
+            const ord = db.orders.find(o => o.id === d.order_id);
+            if (ord && ord.items && ord.items.length > 0) {
+              items = ord.items.map((it: any) => ({
+                ...it,
+                product_name: it.product_name || '19L Water Bottle',
+              }));
+            }
+          }
+
+          return {
+            ...d,
+            customer_name: d.customer?.name || d.customer_name || '',
+            customer_phone: d.customer?.phone || d.customer_phone || '',
+            customer_address: d.customer?.address || d.customer_address || '',
+            customer_area: d.customer?.area || d.customer_area || '',
+            order_number: d.order?.order_number || d.order_number || '',
+            total_amount: d.order?.total_amount || d.total_amount || 0,
+            driver_name: d.driver_id ? (staffMap[d.driver_id] || d.driver_name || 'Assigned Driver') : 'Unassigned',
+            items,
+          };
+        });
         fetchedFromSupabase = true;
 
         // Keep local central DB aligned
@@ -2123,9 +2266,27 @@ apiRouter.get('/deliveries', async (req: Request, res: Response) => {
   if (!fetchedFromSupabase) {
     const db = loadDatabase();
     deliveries = db.deliveries || [];
-    if (statusFilter) deliveries = deliveries.filter((d: any) => d.status === statusFilter);
     if (driverFilter) deliveries = deliveries.filter((d: any) => d.driver_id === driverFilter);
+    if (statusFilter) deliveries = deliveries.filter((d: any) => d.status === statusFilter);
     if (dateFilter) deliveries = deliveries.filter((d: any) => d.delivery_date === dateFilter);
+
+    // Ensure items are populated from order if empty
+    deliveries = deliveries.map((d: any) => {
+      let items = d.items || [];
+      if ((!items || items.length === 0) && d.order_id) {
+        const ord = db.orders.find(o => o.id === d.order_id);
+        if (ord && ord.items && ord.items.length > 0) {
+          items = ord.items.map((it: any) => ({
+            ...it,
+            product_name: it.product_name || '19L Water Bottle',
+          }));
+        }
+      }
+      return {
+        ...d,
+        items,
+      };
+    });
   }
 
   // Delivery Area Filter
@@ -2428,10 +2589,10 @@ apiRouter.post('/deliveries/:id/complete', async (req: Request, res: Response) =
           return res.status(500).json({ message: updErr.message });
         }
 
-        // 6. Update order status to completed
+        // 6. Update order status to delivered
         if (del.order_id) {
           await supabase.from('orders').update({
-            order_status: 'completed',
+            order_status: 'delivered',
             payment_status: paymentCollected >= orderTotal ? 'paid' : (paymentCollected > 0 ? 'partially_paid' : 'pending'),
             updated_at: nowIso,
           }).eq('id', del.order_id);
@@ -2612,7 +2773,7 @@ apiRouter.post('/deliveries/:id/complete', async (req: Request, res: Response) =
 
       const localOrd = localDel ? db.orders.find(o => o.id === localDel.order_id) : null;
       if (localOrd) {
-        localOrd.order_status = 'completed';
+        localOrd.order_status = 'delivered';
         localOrd.payment_status = paymentCollected >= Number(localOrd.total_amount || 0) ? 'paid' : 'pending';
       }
 

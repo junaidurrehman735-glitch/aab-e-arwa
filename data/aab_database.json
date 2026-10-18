@@ -368,13 +368,13 @@
       "cash_status": "Cash on Delivery",
       "credit_limit": 0,
       "outstanding_balance": 0,
-      "cans_held": 0,
+      "cans_held": 3,
       "net_deposit_amount": 0,
       "notes": "",
       "delivery_instructions": "",
       "status": "active",
       "created_at": "2026-10-14T14:47:04.896+00:00",
-      "updated_at": "2026-10-14T14:47:07.784+00:00"
+      "updated_at": "2026-10-17T17:32:56.225+00:00"
     },
     {
       "id": "cust-1791989056037-oj23o",
@@ -391,13 +391,13 @@
       "cash_status": "Cash on Delivery",
       "credit_limit": 0,
       "outstanding_balance": 0,
-      "cans_held": 0,
+      "cans_held": 2,
       "net_deposit_amount": 0,
       "notes": "",
       "delivery_instructions": "",
       "status": "active",
       "created_at": "2026-10-14T14:44:16.36+00:00",
-      "updated_at": "2026-10-14T14:44:18.878+00:00"
+      "updated_at": "2026-10-17T14:47:01.998+00:00"
     },
     {
       "id": "cust-1791988340960-vcf90",
@@ -575,7 +575,7 @@
       "cash_status": "Cash on Delivery",
       "credit_limit": 0,
       "outstanding_balance": 0,
-      "cans_held": 2,
+      "cans_held": 0,
       "net_deposit_amount": 0,
       "notes": "",
       "delivery_instructions": "",
@@ -780,8 +780,8 @@
       "is_active": 1,
       "created_at": "2026-10-11T20:51:24.566804+00:00",
       "updated_at": "2026-10-11T20:51:24.566804+00:00",
-      "filled_stock": 513,
-      "empty_cans": 286
+      "filled_stock": 500,
+      "empty_cans": 119
     },
     {
       "id": "prod-1.5l-bottle",
@@ -817,7 +817,7 @@
       "id": "inv-1791756072022",
       "product_id": "prod-19l-can",
       "filled_stock": 513,
-      "empty_cans": 86,
+      "empty_cans": 90,
       "damaged_cans": 0,
       "lost_cans": 0,
       "updated_at": "2026-10-14T15:06:29.089Z"
@@ -890,30 +890,400 @@
   "production_records": [],
   "orders": [
     {
+      "id": "ord-1792336174746",
+      "order_number": "ORD-174746",
+      "customer_id": "cust-1791790344048",
+      "total_amount": 720,
+      "payment_type": "Cash",
+      "payment_status": "paid",
+      "order_status": "delivered",
+      "delivery_date": "2026-10-18",
+      "delivery_address": "nawa killi zarghoon abad",
+      "notes": "Customer requested 4 cans delivery before 12 PM.",
+      "created_by": "Owner",
+      "created_at": "2026-10-18T15:09:34.746+00:00",
+      "updated_at": "2026-10-18T15:09:36.25+00:00",
+      "customer": {
+        "id": "cust-1791790344048",
+        "area": "Nawa Killi Bypass",
+        "name": "hikmat khan",
+        "phone": "03106854344",
+        "address": "nawa killi zarghoon abad"
+      },
+      "items": [
+        {
+          "id": "item-1792336175058-tqbjg",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1792336174746",
+          "quantity": 4,
+          "product_id": "prod-19l-can",
+          "unit_price": 180,
+          "total_price": 720,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "hikmat khan",
+      "customer_phone": "03106854344",
+      "customer_area": "Nawa Killi Bypass"
+    },
+    {
+      "id": "ord-1792336153095",
+      "order_number": "ORD-153095",
+      "customer_id": "cust-1791989224727-8192d",
+      "total_amount": 360,
+      "payment_type": "Cash",
+      "payment_status": "pending",
+      "order_status": "confirmed",
+      "delivery_date": "2026-10-18",
+      "delivery_address": "Plot 45B Street 3, Quetta (Renovated)",
+      "notes": "Gate delivery test",
+      "created_by": "Owner",
+      "created_at": "2026-10-18T15:09:13.095+00:00",
+      "updated_at": "2026-10-18T15:09:13.359236+00:00",
+      "customer": {
+        "id": "cust-1791989224727-8192d",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Auto Flow Cust 1427 (Verified)",
+        "phone": "03003481118",
+        "address": "Plot 45B Street 3, Quetta (Renovated)"
+      },
+      "items": [
+        {
+          "id": "item-1792336153443-2wvml",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1792336153095",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 180,
+          "total_price": 360,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "Auto Flow Cust 1427 (Verified)",
+      "customer_phone": "03003481118",
+      "customer_area": "Chiltan Scheme Airport Road"
+    },
+    {
+      "id": "ord-1792336044112",
+      "order_number": "ORD-044112",
+      "customer_id": "cust-1791989224727-8192d",
+      "total_amount": 540,
+      "payment_type": "Cash",
+      "payment_status": "pending",
+      "order_status": "confirmed",
+      "delivery_date": "2026-10-18",
+      "delivery_address": "Plot 45B Street 3, Quetta (Renovated)",
+      "notes": "Please leave near the front gate, customer will give 3 empty cans.",
+      "created_by": "Owner",
+      "created_at": "2026-10-18T15:07:24.112+00:00",
+      "updated_at": "2026-10-18T15:07:24.852374+00:00",
+      "customer": {
+        "id": "cust-1791989224727-8192d",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Auto Flow Cust 1427 (Verified)",
+        "phone": "03003481118",
+        "address": "Plot 45B Street 3, Quetta (Renovated)"
+      },
+      "items": [
+        {
+          "id": "item-1792336044977-ry8bm",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1792336044112",
+          "quantity": 3,
+          "product_id": "prod-19l-can",
+          "unit_price": 180,
+          "total_price": 540,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "Auto Flow Cust 1427 (Verified)",
+      "customer_phone": "03003481118",
+      "customer_area": "Chiltan Scheme Airport Road"
+    },
+    {
+      "id": "ord-1792332849688",
+      "order_number": "ORD-849688",
+      "customer_id": "cust-1791989056037-oj23o",
+      "total_amount": 520,
+      "payment_type": "Cash",
+      "payment_status": "pending",
+      "order_status": "dispatched",
+      "delivery_date": "2026-10-18",
+      "delivery_address": "Renovated House 99, Quetta",
+      "notes": "",
+      "created_by": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "created_at": "2026-10-18T14:14:11.805575+00:00",
+      "updated_at": "2026-10-18T14:26:13.839+00:00",
+      "customer": {
+        "id": "cust-1791989056037-oj23o",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Audit Verification Cust 2046 (Updated)",
+        "phone": "03006917528",
+        "address": "Renovated House 99, Quetta"
+      },
+      "items": [
+        {
+          "id": "item-1792332850138-xf3gq",
+          "product": {
+            "id": "prod-1.5l-bottle",
+            "name": "AAB E ARWA 1.5L Drinking Water (Pack of 6)",
+            "size": "1.5 Liter (6-Pack)",
+            "unit": "Pack"
+          },
+          "order_id": "ord-1792332849688",
+          "quantity": 2,
+          "product_id": "prod-1.5l-bottle",
+          "unit_price": 260,
+          "total_price": 520,
+          "product_name": "AAB E ARWA 1.5L Drinking Water (Pack of 6)",
+          "size": "1.5 Liter (6-Pack)",
+          "unit": "Pack"
+        }
+      ],
+      "customer_name": "Audit Verification Cust 2046 (Updated)",
+      "customer_phone": "03006917528",
+      "customer_area": "Chiltan Scheme Airport Road"
+    },
+    {
+      "id": "ord-1792248359503",
+      "order_number": "ORD-359503",
+      "customer_id": "cust-1791989056037-oj23o",
+      "total_amount": 520,
+      "payment_type": "Cash",
+      "payment_status": "paid",
+      "order_status": "completed",
+      "delivery_date": "2026-10-17",
+      "delivery_address": "Renovated House 99, Quetta",
+      "notes": "",
+      "created_by": "Owner",
+      "created_at": "2026-10-17T14:45:59.503+00:00",
+      "updated_at": "2026-10-17T14:47:01.998+00:00",
+      "customer": {
+        "id": "cust-1791989056037-oj23o",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Audit Verification Cust 2046 (Updated)",
+        "phone": "03006917528",
+        "address": "Renovated House 99, Quetta"
+      },
+      "items": [
+        {
+          "id": "item-1792248360261-3d905",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1792248359503",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 260,
+          "total_price": 520,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "Audit Verification Cust 2046 (Updated)",
+      "customer_phone": "03006917528",
+      "customer_area": "Chiltan Scheme Airport Road"
+    },
+    {
       "id": "ord-1792024480066",
       "order_number": "ORD-480066",
       "customer_id": "cust-1791989224727-8192d",
       "total_amount": 750,
       "payment_type": "Cash",
-      "payment_status": "pending",
-      "order_status": "confirmed",
+      "payment_status": "paid",
+      "order_status": "completed",
       "delivery_date": "2026-10-15",
       "delivery_address": "",
       "notes": "",
       "created_by": "Owner",
-      "created_at": "2026-10-15T00:34:40.066Z",
-      "customer_name": "Auto Flow Cust 1427 (Verified)",
-      "customer_phone": "03003481118",
-      "customer_area": "Chiltan Scheme Airport Road",
+      "created_at": "2026-10-15T00:34:40.066+00:00",
+      "updated_at": "2026-10-17T17:32:56.225+00:00",
+      "customer": {
+        "id": "cust-1791989224727-8192d",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Auto Flow Cust 1427 (Verified)",
+        "phone": "03003481118",
+        "address": "Plot 45B Street 3, Quetta (Renovated)"
+      },
       "items": [
         {
-          "product_id": "prod-19l-can",
-          "product_name": "19L Water Bottle",
+          "id": "item-1792024480394-i5zp8",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1792024480066",
           "quantity": 3,
+          "product_id": "prod-19l-can",
           "unit_price": 250,
-          "total_price": 750
+          "total_price": 750,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
         }
-      ]
+      ],
+      "customer_name": "Auto Flow Cust 1427 (Verified)",
+      "customer_phone": "03003481118",
+      "customer_area": "Chiltan Scheme Airport Road"
+    },
+    {
+      "id": "ord-1792023124123",
+      "order_number": "ORD-124123",
+      "customer_id": "cust-1791905628085-ol3jt",
+      "total_amount": 444,
+      "payment_type": "Cash",
+      "payment_status": "paid",
+      "order_status": "completed",
+      "delivery_date": "2026-10-15",
+      "delivery_address": "kh",
+      "notes": "",
+      "created_by": "Owner",
+      "created_at": "2026-10-15T00:12:04.123+00:00",
+      "updated_at": "2026-10-15T00:12:22.826+00:00",
+      "customer": {
+        "id": "cust-1791905628085-ol3jt",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Junaid Ur rehman",
+        "phone": "1234567890",
+        "address": "kh"
+      },
+      "items": [
+        {
+          "id": "item-1792023124333-nqkgx",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1792023124123",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 222,
+          "total_price": 444,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "Junaid Ur rehman",
+      "customer_phone": "1234567890",
+      "customer_area": "Chiltan Scheme Airport Road"
+    },
+    {
+      "id": "ord-1792023068293",
+      "order_number": "ORD-068293",
+      "customer_id": "cust-1791905628085-ol3jt",
+      "total_amount": 888,
+      "payment_type": "Cash",
+      "payment_status": "paid",
+      "order_status": "completed",
+      "delivery_date": "2026-10-15",
+      "delivery_address": "kh",
+      "notes": "",
+      "created_by": "Owner",
+      "created_at": "2026-10-15T00:11:08.293+00:00",
+      "updated_at": "2026-10-15T00:11:27.632+00:00",
+      "customer": {
+        "id": "cust-1791905628085-ol3jt",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Junaid Ur rehman",
+        "phone": "1234567890",
+        "address": "kh"
+      },
+      "items": [
+        {
+          "id": "item-1792023068551-iolvw",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1792023068293",
+          "quantity": 4,
+          "product_id": "prod-19l-can",
+          "unit_price": 222,
+          "total_price": 888,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "Junaid Ur rehman",
+      "customer_phone": "1234567890",
+      "customer_area": "Chiltan Scheme Airport Road"
+    },
+    {
+      "id": "ord-1792023000261",
+      "order_number": "ORD-000261",
+      "customer_id": "cust-1791753461009",
+      "total_amount": 644,
+      "payment_type": "Cash",
+      "payment_status": "paid",
+      "order_status": "completed",
+      "delivery_date": "2026-10-15",
+      "delivery_address": "1330 Gessner Rd",
+      "notes": "",
+      "created_by": "Owner",
+      "created_at": "2026-10-15T00:10:00.261+00:00",
+      "updated_at": "2026-10-15T00:10:17.141+00:00",
+      "customer": {
+        "id": "cust-1791753461009",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Stephanie Thomas",
+        "phone": "234567654321",
+        "address": "1330 Gessner Rd"
+      },
+      "items": [
+        {
+          "id": "item-1792023001015-0uox7",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1792023000261",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 322,
+          "total_price": 644,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "Stephanie Thomas",
+      "customer_phone": "234567654321",
+      "customer_area": "Chiltan Scheme Airport Road"
     },
     {
       "id": "ord-1791989225912",
@@ -1244,25 +1614,7 @@
         "phone": "03138941234",
         "address": "chiltan schme house number 2"
       },
-      "items": [
-        {
-          "id": "item-1791826341749-eydyx",
-          "product": {
-            "id": "prod-19l-can",
-            "name": "AAB E ARWA 19L Premium Water Can",
-            "size": "19 Liter",
-            "unit": "Can"
-          },
-          "order_id": "ord-1791826341166",
-          "quantity": 2,
-          "product_id": "prod-19l-can",
-          "unit_price": 130,
-          "total_price": 260,
-          "product_name": "AAB E ARWA 19L Premium Water Can",
-          "size": "19 Liter",
-          "unit": "Can"
-        }
-      ],
+      "items": [],
       "customer_name": "fazal shah",
       "customer_phone": "03138941234",
       "customer_area": "Chiltan Scheme Airport Road"
@@ -1894,9 +2246,510 @@
       "quantity": 3,
       "unit_price": 250,
       "total_price": 750
+    },
+    {
+      "id": "oi-1792336045522-bxmiy",
+      "order_id": "ord-1792336044112",
+      "product_id": "prod-19l-can",
+      "quantity": 3,
+      "unit_price": 180,
+      "total_price": 540
+    },
+    {
+      "id": "oi-1792336154130-557yd",
+      "order_id": "ord-1792336153095",
+      "product_id": "prod-19l-can",
+      "quantity": 2,
+      "unit_price": 180,
+      "total_price": 360
+    },
+    {
+      "id": "oi-1792336175701-ocfga",
+      "order_id": "ord-1792336174746",
+      "product_id": "prod-19l-can",
+      "quantity": 4,
+      "unit_price": 180,
+      "total_price": 720
     }
   ],
   "deliveries": [
+    {
+      "id": "del-1792336175349",
+      "delivery_number": "DEL-175349",
+      "order_id": "ord-1792336174746",
+      "customer_id": "cust-1791790344048",
+      "driver_id": "15c7125b-d0a8-44ef-8fe7-cc058a1c9aa4",
+      "vehicle": "Van #2",
+      "delivery_date": "2026-10-18",
+      "delivery_time": "Morning",
+      "status": "delivered",
+      "empty_cans_returned": 4,
+      "payment_collected": 720,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "Delivered 4 bottles and collected 4 empty cans successfully.",
+      "completed_at": "2026-10-18T15:09:36.25+00:00",
+      "created_at": "2026-10-18T15:09:34.746+00:00",
+      "updated_at": "2026-10-18T15:09:36.25+00:00",
+      "customer": {
+        "id": "cust-1791790344048",
+        "area": "Nawa Killi Bypass",
+        "name": "hikmat khan",
+        "phone": "03106854344",
+        "address": "nawa killi zarghoon abad"
+      },
+      "order": {
+        "id": "ord-1792336174746",
+        "order_number": "ORD-174746",
+        "total_amount": 720
+      },
+      "items": [
+        {
+          "id": "ditem-1792336175349-ho3rm",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can"
+          },
+          "quantity": 4,
+          "product_id": "prod-19l-can",
+          "delivery_id": "del-1792336175349",
+          "product_name": "AAB E ARWA 19L Premium Water Can"
+        }
+      ],
+      "customer_name": "hikmat khan",
+      "customer_phone": "03106854344",
+      "customer_address": "nawa killi zarghoon abad",
+      "customer_area": "Nawa Killi Bypass",
+      "order_number": "ORD-174746",
+      "total_amount": 720,
+      "driver_name": "delevery boy"
+    },
+    {
+      "id": "del-1792336153808",
+      "delivery_number": "DEL-153808",
+      "order_id": "ord-1792336153095",
+      "customer_id": "cust-1791989224727-8192d",
+      "driver_id": "89198262-90b1-4e0d-adcc-63091463ba52",
+      "vehicle": "Van #1",
+      "delivery_date": "2026-10-18",
+      "delivery_time": "Morning",
+      "status": "assigned",
+      "empty_cans_returned": 0,
+      "payment_collected": 0,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "Gate delivery test",
+      "completed_at": null,
+      "created_at": "2026-10-18T15:09:13.095+00:00",
+      "updated_at": "2026-10-18T15:09:13.923081+00:00",
+      "customer": {
+        "id": "cust-1791989224727-8192d",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Auto Flow Cust 1427 (Verified)",
+        "phone": "03003481118",
+        "address": "Plot 45B Street 3, Quetta (Renovated)"
+      },
+      "order": {
+        "id": "ord-1792336153095",
+        "order_number": "ORD-153095",
+        "total_amount": 360
+      },
+      "items": [
+        {
+          "id": "ditem-1792336153808-5ljds",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can"
+          },
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "delivery_id": "del-1792336153808",
+          "product_name": "AAB E ARWA 19L Premium Water Can"
+        }
+      ],
+      "customer_name": "Auto Flow Cust 1427 (Verified)",
+      "customer_phone": "03003481118",
+      "customer_address": "Plot 45B Street 3, Quetta (Renovated)",
+      "customer_area": "Chiltan Scheme Airport Road",
+      "order_number": "ORD-153095",
+      "total_amount": 360,
+      "driver_name": "kakar1"
+    },
+    {
+      "id": "del-1792336044977",
+      "delivery_number": "DEL-044977",
+      "order_id": "ord-1792336044112",
+      "customer_id": "cust-1791989224727-8192d",
+      "driver_id": null,
+      "vehicle": "Van #1",
+      "delivery_date": "2026-10-18",
+      "delivery_time": "Morning",
+      "status": "assigned",
+      "empty_cans_returned": 0,
+      "payment_collected": 0,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "Please leave near the front gate, customer will give 3 empty cans.",
+      "completed_at": null,
+      "created_at": "2026-10-18T15:07:24.112+00:00",
+      "updated_at": "2026-10-18T15:07:25.416802+00:00",
+      "customer": {
+        "id": "cust-1791989224727-8192d",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Auto Flow Cust 1427 (Verified)",
+        "phone": "03003481118",
+        "address": "Plot 45B Street 3, Quetta (Renovated)"
+      },
+      "order": {
+        "id": "ord-1792336044112",
+        "order_number": "ORD-044112",
+        "total_amount": 540
+      },
+      "items": [
+        {
+          "id": "ditem-1792336044977-bz1sa",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can"
+          },
+          "quantity": 3,
+          "product_id": "prod-19l-can",
+          "delivery_id": "del-1792336044977",
+          "product_name": "AAB E ARWA 19L Premium Water Can"
+        }
+      ],
+      "customer_name": "Auto Flow Cust 1427 (Verified)",
+      "customer_phone": "03003481118",
+      "customer_address": "Plot 45B Street 3, Quetta (Renovated)",
+      "customer_area": "Chiltan Scheme Airport Road",
+      "order_number": "ORD-044112",
+      "total_amount": 540,
+      "driver_name": "Unassigned"
+    },
+    {
+      "id": "del-1792332850535",
+      "delivery_number": "DEL-850535",
+      "order_id": "ord-1792332849688",
+      "customer_id": "cust-1791989056037-oj23o",
+      "driver_id": "owner-uuid-001",
+      "vehicle": "Suzuki APV (LEA-819)",
+      "delivery_date": "2026-10-18",
+      "delivery_time": "11:00 AM",
+      "status": "out_for_delivery",
+      "empty_cans_returned": 0,
+      "payment_collected": 0,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": null,
+      "completed_at": null,
+      "created_at": "2026-10-18T14:14:12.652243+00:00",
+      "updated_at": "2026-10-18T14:56:03.866+00:00",
+      "customer": {
+        "id": "cust-1791989056037-oj23o",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Audit Verification Cust 2046 (Updated)",
+        "phone": "03006917528",
+        "address": "Renovated House 99, Quetta"
+      },
+      "order": {
+        "id": "ord-1792332849688",
+        "order_number": "ORD-849688",
+        "total_amount": 520
+      },
+      "items": [
+        {
+          "id": "item-1792332850138-xf3gq",
+          "product": {
+            "id": "prod-1.5l-bottle",
+            "name": "AAB E ARWA 1.5L Drinking Water (Pack of 6)",
+            "size": "1.5 Liter (6-Pack)",
+            "unit": "Pack"
+          },
+          "order_id": "ord-1792332849688",
+          "quantity": 2,
+          "product_id": "prod-1.5l-bottle",
+          "unit_price": 260,
+          "total_price": 520,
+          "product_name": "AAB E ARWA 1.5L Drinking Water (Pack of 6)",
+          "size": "1.5 Liter (6-Pack)",
+          "unit": "Pack"
+        }
+      ],
+      "customer_name": "Audit Verification Cust 2046 (Updated)",
+      "customer_phone": "03006917528",
+      "customer_address": "Renovated House 99, Quetta",
+      "customer_area": "Chiltan Scheme Airport Road",
+      "order_number": "ORD-849688",
+      "total_amount": 520,
+      "driver_name": "Aab-e-Arwa Owner"
+    },
+    {
+      "id": "del-1792248360261",
+      "delivery_number": "DEL-360261",
+      "order_id": "ord-1792248359503",
+      "customer_id": "cust-1791989056037-oj23o",
+      "driver_id": "owner-uuid-001",
+      "vehicle": "Suzuki APV (LEA-819)",
+      "delivery_date": "2026-10-17",
+      "delivery_time": "11:00 AM",
+      "status": "delivered",
+      "empty_cans_returned": 0,
+      "payment_collected": 520,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "",
+      "completed_at": "2026-10-17T14:47:01.998+00:00",
+      "created_at": "2026-10-17T14:45:59.503+00:00",
+      "updated_at": "2026-10-17T14:47:01.998+00:00",
+      "customer": {
+        "id": "cust-1791989056037-oj23o",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Audit Verification Cust 2046 (Updated)",
+        "phone": "03006917528",
+        "address": "Renovated House 99, Quetta"
+      },
+      "order": {
+        "id": "ord-1792248359503",
+        "order_number": "ORD-359503",
+        "total_amount": 520
+      },
+      "items": [
+        {
+          "id": "item-1792248360261-3d905",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1792248359503",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 260,
+          "total_price": 520,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "Audit Verification Cust 2046 (Updated)",
+      "customer_phone": "03006917528",
+      "customer_address": "Renovated House 99, Quetta",
+      "customer_area": "Chiltan Scheme Airport Road",
+      "order_number": "ORD-359503",
+      "total_amount": 520,
+      "driver_name": "Aab-e-Arwa Owner"
+    },
+    {
+      "id": "del-1792024480394",
+      "delivery_number": "DEL-480394",
+      "order_id": "ord-1792024480066",
+      "customer_id": "cust-1791989224727-8192d",
+      "driver_id": null,
+      "vehicle": "Van #1",
+      "delivery_date": "2026-10-15",
+      "delivery_time": "Morning",
+      "status": "delivered",
+      "empty_cans_returned": 0,
+      "payment_collected": 750,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "",
+      "completed_at": "2026-10-17T17:32:56.225+00:00",
+      "created_at": "2026-10-15T00:34:40.066+00:00",
+      "updated_at": "2026-10-17T17:32:56.225+00:00",
+      "customer": {
+        "id": "cust-1791989224727-8192d",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Auto Flow Cust 1427 (Verified)",
+        "phone": "03003481118",
+        "address": "Plot 45B Street 3, Quetta (Renovated)"
+      },
+      "order": {
+        "id": "ord-1792024480066",
+        "order_number": "ORD-480066",
+        "total_amount": 750
+      },
+      "items": [
+        {
+          "id": "item-1792024480394-i5zp8",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1792024480066",
+          "quantity": 3,
+          "product_id": "prod-19l-can",
+          "unit_price": 250,
+          "total_price": 750,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
+      "customer_name": "Auto Flow Cust 1427 (Verified)",
+      "customer_phone": "03003481118",
+      "customer_address": "Plot 45B Street 3, Quetta (Renovated)",
+      "customer_area": "Chiltan Scheme Airport Road",
+      "order_number": "ORD-480066",
+      "total_amount": 750,
+      "driver_name": "Unassigned"
+    },
+    {
+      "id": "del-1792023124333",
+      "delivery_number": "DEL-124333",
+      "order_id": "ord-1792023124123",
+      "customer_id": "cust-1791905628085-ol3jt",
+      "driver_id": "owner-uuid-001",
+      "vehicle": "Suzuki APV (LEA-819)",
+      "delivery_date": "2026-10-15",
+      "delivery_time": "11:00 AM",
+      "status": "delivered",
+      "empty_cans_returned": 4,
+      "payment_collected": 444,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "",
+      "completed_at": "2026-10-15T00:12:22.826+00:00",
+      "created_at": "2026-10-15T00:12:04.123+00:00",
+      "updated_at": "2026-10-15T00:12:22.826+00:00",
+      "customer": {
+        "id": "cust-1791905628085-ol3jt",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Junaid Ur rehman",
+        "phone": "1234567890",
+        "address": "kh"
+      },
+      "order": {
+        "id": "ord-1792023124123",
+        "order_number": "ORD-124123",
+        "total_amount": 444
+      },
+      "items": [
+        {
+          "id": "ditem-1792023124333-jgskh",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can"
+          },
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "delivery_id": "del-1792023124333",
+          "product_name": "AAB E ARWA 19L Premium Water Can"
+        }
+      ],
+      "customer_name": "Junaid Ur rehman",
+      "customer_phone": "1234567890",
+      "customer_address": "kh",
+      "customer_area": "Chiltan Scheme Airport Road",
+      "order_number": "ORD-124123",
+      "total_amount": 444,
+      "driver_name": "Aab-e-Arwa Owner"
+    },
+    {
+      "id": "del-1792023068551",
+      "delivery_number": "DEL-068551",
+      "order_id": "ord-1792023068293",
+      "customer_id": "cust-1791905628085-ol3jt",
+      "driver_id": "owner-uuid-001",
+      "vehicle": "Suzuki APV (LEA-819)",
+      "delivery_date": "2026-10-15",
+      "delivery_time": "11:00 AM",
+      "status": "delivered",
+      "empty_cans_returned": 0,
+      "payment_collected": 888,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "",
+      "completed_at": "2026-10-15T00:11:27.632+00:00",
+      "created_at": "2026-10-15T00:11:08.293+00:00",
+      "updated_at": "2026-10-15T00:11:27.632+00:00",
+      "customer": {
+        "id": "cust-1791905628085-ol3jt",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Junaid Ur rehman",
+        "phone": "1234567890",
+        "address": "kh"
+      },
+      "order": {
+        "id": "ord-1792023068293",
+        "order_number": "ORD-068293",
+        "total_amount": 888
+      },
+      "items": [
+        {
+          "id": "ditem-1792023068551-hfoy1",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can"
+          },
+          "quantity": 4,
+          "product_id": "prod-19l-can",
+          "delivery_id": "del-1792023068551",
+          "product_name": "AAB E ARWA 19L Premium Water Can"
+        }
+      ],
+      "customer_name": "Junaid Ur rehman",
+      "customer_phone": "1234567890",
+      "customer_address": "kh",
+      "customer_area": "Chiltan Scheme Airport Road",
+      "order_number": "ORD-068293",
+      "total_amount": 888,
+      "driver_name": "Aab-e-Arwa Owner"
+    },
+    {
+      "id": "del-1792023001015",
+      "delivery_number": "DEL-001015",
+      "order_id": "ord-1792023000261",
+      "customer_id": "cust-1791753461009",
+      "driver_id": "owner-uuid-001",
+      "vehicle": "Suzuki APV (LEA-819)",
+      "delivery_date": "2026-10-15",
+      "delivery_time": "11:00 AM",
+      "status": "delivered",
+      "empty_cans_returned": 0,
+      "payment_collected": 644,
+      "payment_method": "Cash",
+      "failure_reason": null,
+      "notes": "",
+      "completed_at": "2026-10-15T00:10:17.141+00:00",
+      "created_at": "2026-10-15T00:10:00.261+00:00",
+      "updated_at": "2026-10-15T00:10:17.141+00:00",
+      "customer": {
+        "id": "cust-1791753461009",
+        "area": "Chiltan Scheme Airport Road",
+        "name": "Stephanie Thomas",
+        "phone": "234567654321",
+        "address": "1330 Gessner Rd"
+      },
+      "order": {
+        "id": "ord-1792023000261",
+        "order_number": "ORD-000261",
+        "total_amount": 644
+      },
+      "items": [
+        {
+          "id": "ditem-1792023001015-jfaog",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can"
+          },
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "delivery_id": "del-1792023001015",
+          "product_name": "AAB E ARWA 19L Premium Water Can"
+        }
+      ],
+      "customer_name": "Stephanie Thomas",
+      "customer_phone": "234567654321",
+      "customer_address": "1330 Gessner Rd",
+      "customer_area": "Chiltan Scheme Airport Road",
+      "order_number": "ORD-000261",
+      "total_amount": 644,
+      "driver_name": "Aab-e-Arwa Owner"
+    },
     {
       "id": "del-1791989226016",
       "delivery_number": "DEL-226016",
@@ -1927,7 +2780,25 @@
         "order_number": "ORD-225912",
         "total_amount": 480
       },
-      "items": [],
+      "items": [
+        {
+          "id": "item-1791989226016-tqob0",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791989225912",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 240,
+          "total_price": 480,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
       "customer_name": "Auto Flow Cust 1427 (Verified)",
       "customer_phone": "03003481118",
       "customer_address": "Plot 45B Street 3, Quetta (Renovated)",
@@ -1966,7 +2837,25 @@
         "order_number": "ORD-135657",
         "total_amount": 260
       },
-      "items": [],
+      "items": [
+        {
+          "id": "item-1791989136213-zpgy2",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791989135657",
+          "quantity": 1,
+          "product_id": "prod-19l-can",
+          "unit_price": 260,
+          "total_price": 260,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
       "customer_name": "Audit Verification Cust 2046 (Updated)",
       "customer_phone": "03006917528",
       "customer_address": "Renovated House 99, Quetta",
@@ -2056,7 +2945,25 @@
         "order_number": "ORD-342430",
         "total_amount": 750
       },
-      "items": [],
+      "items": [
+        {
+          "id": "item-1791988342559-4th4a",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791988342430",
+          "quantity": 3,
+          "product_id": "prod-19l-can",
+          "unit_price": 250,
+          "total_price": 750,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
       "customer_name": "Audit Verification Customer 0890 (Updated)",
       "customer_phone": "03007654321",
       "customer_address": "Airport Road Plaza 4, Quetta (Renovated)",
@@ -2095,7 +3002,25 @@
         "order_number": "ORD-276924",
         "total_amount": 480
       },
-      "items": [],
+      "items": [
+        {
+          "id": "item-1791988277135-lo73p",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791988276924",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 240,
+          "total_price": 480,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
       "customer_name": "Audit Test Customer 4252 (Updated)",
       "customer_phone": "03001234567",
       "customer_address": "Test Street 1, Quetta (Updated)",
@@ -2185,7 +3110,25 @@
         "order_number": "ORD-360496",
         "total_amount": 280
       },
-      "items": [],
+      "items": [
+        {
+          "id": "item-1791826360823-3q3je",
+          "product": {
+            "id": "prod-19l-can",
+            "name": "AAB E ARWA 19L Premium Water Can",
+            "size": "19 Liter",
+            "unit": "Can"
+          },
+          "order_id": "ord-1791826360496",
+          "quantity": 2,
+          "product_id": "prod-19l-can",
+          "unit_price": 140,
+          "total_price": 280,
+          "product_name": "AAB E ARWA 19L Premium Water Can",
+          "size": "19 Liter",
+          "unit": "Can"
+        }
+      ],
       "customer_name": "Marwan khan kakar",
       "customer_phone": "03178019253",
       "customer_address": "sahar housing schme house no 1",
@@ -3212,6 +4155,102 @@
   "supplier_transactions": [],
   "audit_logs": [
     {
+      "id": "aud-1792336178675-bd897n",
+      "user_id": "owner-uuid-001",
+      "user_name": "Aab-e-Arwa Owner",
+      "user_role": "Owner",
+      "action": "COMPLETE_DELIVERY",
+      "module": "deliveries",
+      "record_ref": "del-1792336175349",
+      "details": "Completed delivery #DEL-175349 | Returned cans: 4 | Cash collected: PKR 720",
+      "old_value": {
+        "status": "out_for_delivery"
+      },
+      "new_value": {
+        "status": "delivered",
+        "empty_cans_returned": 4,
+        "payment_collected": 720,
+        "payment_method": "Cash"
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-18T15:09:38.675Z"
+    },
+    {
+      "id": "aud-1792336175702-j3on9y",
+      "user_id": "owner-uuid-001",
+      "user_name": "Aab-e-Arwa Owner",
+      "user_role": "Owner",
+      "action": "CREATE_ORDER",
+      "module": "orders",
+      "record_ref": "ord-1792336174746",
+      "details": "Created order #ORD-174746 for customer \"hikmat khan\" | Total: PKR 720 | Delivery: 2026-10-18",
+      "old_value": null,
+      "new_value": {
+        "order_number": "ORD-174746",
+        "total_amount": 720,
+        "delivery_date": "2026-10-18",
+        "items_count": 1
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-18T15:09:35.702Z"
+    },
+    {
+      "id": "aud-1792336154133-biej7k",
+      "user_id": "owner-uuid-001",
+      "user_name": "Aab-e-Arwa Owner",
+      "user_role": "Owner",
+      "action": "CREATE_ORDER",
+      "module": "orders",
+      "record_ref": "ord-1792336153095",
+      "details": "Created order #ORD-153095 for customer \"Auto Flow Cust 1427 (Verified)\" | Total: PKR 360 | Delivery: 2026-10-18",
+      "old_value": null,
+      "new_value": {
+        "order_number": "ORD-153095",
+        "total_amount": 360,
+        "delivery_date": "2026-10-18",
+        "items_count": 1
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-18T15:09:14.133Z"
+    },
+    {
+      "id": "aud-1792336045524-blbr2z",
+      "user_id": "owner-uuid-001",
+      "user_name": "Aab-e-Arwa Owner",
+      "user_role": "Owner",
+      "action": "CREATE_ORDER",
+      "module": "orders",
+      "record_ref": "ord-1792336044112",
+      "details": "Created order #ORD-044112 for customer \"Auto Flow Cust 1427 (Verified)\" | Total: PKR 540 | Delivery: 2026-10-18",
+      "old_value": null,
+      "new_value": {
+        "order_number": "ORD-044112",
+        "total_amount": 540,
+        "delivery_date": "2026-10-18",
+        "items_count": 1
+      },
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-10-18T15:07:25.524Z"
+    },
+    {
+      "id": "aud-1792335364555-ioonwr",
+      "user_id": "b4bb1644-07e5-464b-a11b-962f56a840c8",
+      "user_name": "Junaid ur Rehman",
+      "user_role": "Owner",
+      "action": "DISPATCH_DELIVERY",
+      "module": "deliveries",
+      "record_ref": "del-1792332850535",
+      "details": "Delivery #del-1792332850535 status updated: assigned → out_for_delivery",
+      "old_value": {
+        "status": "assigned"
+      },
+      "new_value": {
+        "status": "out_for_delivery"
+      },
+      "ip_address": "153.117.1.225, 169.254.169.126",
+      "created_at": "2026-10-18T14:56:04.555Z"
+    },
+    {
       "id": "aud-1792024480732-jqjv8f",
       "user_id": "owner-uuid-001",
       "user_name": "Aab-e-Arwa Owner",
@@ -4017,6 +5056,16 @@
         "updated_at": "2026-10-13T14:17:38.968988+00:00"
       },
       "created_at": "2026-10-13T14:17:39.067Z"
+    },
+    "test-comp-del-1792336175349": {
+      "key": "test-comp-del-1792336175349",
+      "action": "complete_delivery",
+      "response": {
+        "success": true,
+        "delivery_id": "del-1792336175349",
+        "status": "delivered"
+      },
+      "created_at": "2026-10-18T15:09:38.674Z"
     }
   }
 }

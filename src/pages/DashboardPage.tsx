@@ -676,7 +676,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
               {staticFilledStock.toLocaleString()}{' '}
               <span className="text-xs font-normal text-slate-500">cans</span>
             </div>
-            <div className="text-[11px] text-slate-400 mt-0.5">Ready for dispatch (Current)</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">Ready for delivery (Current)</div>
           </div>
         </div>
 

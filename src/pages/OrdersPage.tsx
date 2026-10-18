@@ -22,6 +22,7 @@ import {
   DollarSign,
   Truck,
   Eye,
+  Check,
   CheckCircle2,
   Trash2,
   AlertTriangle,
@@ -52,13 +53,11 @@ export const OrdersPage: React.FC = () => {
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-  const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [orderDetails, setOrderDetails] = useState<any | null>(null);
 
   // Rapid Submission / Double Click Protection states
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
-  const [isDispatching, setIsDispatching] = useState(false);
   const [isInlineCreatingCustomer, setIsInlineCreatingCustomer] = useState(false);
 
   // New Order Form state
@@ -70,13 +69,6 @@ export const OrdersPage: React.FC = () => {
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [paymentType, setPaymentType] = useState<'Cash' | 'Credit'>('Cash');
   const [notes, setNotes] = useState('');
-
-  // Dispatch Form state
-  const [dispatchForm, setDispatchForm] = useState({
-    driver_id: '',
-    vehicle: 'Suzuki APV (LEA-819)',
-    delivery_time: '10:00 AM',
-  });
 
   // Delete Order State
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -380,49 +372,30 @@ export const OrdersPage: React.FC = () => {
     }
   };
 
-  const openDispatch = (ord: Order) => {
-    setSelectedOrder(ord);
-    setDispatchForm({
-      driver_id: drivers[0]?.id || '',
-      vehicle: 'Suzuki APV (LEA-819)',
-      delivery_time: '11:00 AM',
-    });
-    setIsDispatchModalOpen(true);
-  };
-
-  const handleDispatch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedOrder || isDispatching) return;
-    setIsDispatching(true);
-
-    const idempotencyKey = `disp-${selectedOrder.id}-${Date.now()}`;
-
+  const handleConfirmOrder = async (ord: Order) => {
     try {
-      await api.post('/deliveries/create-for-order', {
-        idempotency_key: idempotencyKey,
-        order_id: selectedOrder.id,
-        driver_id: dispatchForm.driver_id,
-        vehicle: dispatchForm.vehicle,
-        delivery_time: dispatchForm.delivery_time,
-      }, {
-        'x-idempotency-key': idempotencyKey,
-      });
-      toast.success(`Delivery route created and assigned for Order #${selectedOrder.order_number}`);
-      setIsDispatchModalOpen(false);
-      setIsDetailsModalOpen(false);
+      await api.put(`/orders/${ord.id}/status`, { status: 'confirmed' });
+      toast.success(`Order #${ord.order_number} confirmed! Delivery route automatically assigned.`);
       fetchData();
     } catch (err: any) {
-      toast.error(err.message || 'Failed to assign delivery');
-    } finally {
-      setIsDispatching(false);
+      toast.error(err.message || 'Failed to confirm order');
     }
   };
 
-  const filteredOrders = orders.filter((o) =>
-    (o.order_number.toLowerCase().includes(search.toLowerCase()) ||
-     (o.customer_name && o.customer_name.toLowerCase().includes(search.toLowerCase())) ||
-     (o.customer_area && o.customer_area.toLowerCase().includes(search.toLowerCase())))
-  );
+  const filteredOrders = orders.filter((o) => {
+    const matchesStatus = !statusFilter
+      ? true
+      : statusFilter === 'delivered'
+      ? o.order_status === 'delivered' || o.order_status === 'completed'
+      : o.order_status === statusFilter;
+
+    const matchesSearch =
+      o.order_number.toLowerCase().includes(search.toLowerCase()) ||
+      (o.customer_name && o.customer_name.toLowerCase().includes(search.toLowerCase())) ||
+      (o.customer_area && o.customer_area.toLowerCase().includes(search.toLowerCase()));
+
+    return matchesStatus && matchesSearch;
+  });
 
   return (
     <div className="space-y-6">
@@ -452,7 +425,7 @@ export const OrdersPage: React.FC = () => {
           {[
             { id: '', label: 'All Orders' },
             { id: 'confirmed', label: 'Confirmed' },
-            { id: 'completed', label: 'Completed' },
+            { id: 'delivered', label: 'Delivered' },
             { id: 'pending', label: 'Pending' },
           ].map((st) => (
             <button
@@ -574,15 +547,31 @@ export const OrdersPage: React.FC = () => {
                           <Eye className="w-4 h-4" />
                         </button>
 
-                        {ord.order_status === 'confirmed' && (
-                          <button
-                            onClick={() => openDispatch(ord)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded-md text-[11px] font-semibold border border-sky-200 cursor-pointer"
+                        {ord.order_status === 'confirmed' ? (
+                          <span
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-md text-[11px] font-semibold border border-emerald-200"
+                            title="Automatically assigned & ready in Deliveries & Routes"
                           >
-                            <Truck className="w-3 h-3" />
-                            <span>Dispatch</span>
+                            <Truck className="w-3 h-3 text-emerald-600" />
+                            <span>Ready for Delivery</span>
+                          </span>
+                        ) : ord.order_status === 'pending' ? (
+                          <button
+                            onClick={() => handleConfirmOrder(ord)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded-md text-[11px] font-semibold transition-colors cursor-pointer"
+                            title="Confirm order & assign delivery route"
+                          >
+                            <Check className="w-3 h-3" />
+                            <span>Confirm</span>
                           </button>
-                        )}
+                        ) : (ord.order_status === 'delivered' || ord.order_status === 'completed') ? (
+                          <span
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 text-slate-600 rounded-md text-[11px] font-medium border border-slate-200"
+                          >
+                            <Check className="w-3 h-3 text-emerald-600" />
+                            <span>Delivered</span>
+                          </span>
+                        ) : null}
 
                         {hasPermission('orders', 'can_delete') && (
                           <button
@@ -1303,89 +1292,9 @@ export const OrdersPage: React.FC = () => {
               >
                 Close
               </button>
-              {!orderDetails.delivery && orderDetails.order.order_status === 'confirmed' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsDetailsModalOpen(false);
-                    openDispatch(orderDetails.order);
-                  }}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-sky-600 rounded-lg cursor-pointer"
-                >
-                  Schedule Dispatch Route
-                </button>
-              )}
             </div>
           </div>
         )}
-      </Modal>
-
-      {/* MODAL: DISPATCH ORDER */}
-      <Modal
-        isOpen={isDispatchModalOpen}
-        onClose={() => setIsDispatchModalOpen(false)}
-        title={selectedOrder ? `Dispatch Order #${selectedOrder.order_number}` : 'Dispatch Delivery'}
-        maxWidth="md"
-      >
-        <form onSubmit={handleDispatch} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Assign Driver / Delivery Staff *</label>
-            <select
-              required
-              value={dispatchForm.driver_id}
-              onChange={(e) => setDispatchForm({ ...dispatchForm, driver_id: e.target.value })}
-              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg"
-            >
-              <option value="">-- Choose Driver --</option>
-              {drivers.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name} ({d.phone || 'Driver'})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Vehicle</label>
-            <input
-              type="text"
-              value={dispatchForm.vehicle}
-              onChange={(e) => setDispatchForm({ ...dispatchForm, vehicle: e.target.value })}
-              placeholder="e.g. Suzuki APV LEA-819"
-              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Expected Delivery Time</label>
-            <input
-              type="text"
-              value={dispatchForm.delivery_time}
-              onChange={(e) => setDispatchForm({ ...dispatchForm, delivery_time: e.target.value })}
-              placeholder="e.g. 11:30 AM"
-              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg"
-            />
-          </div>
-
-          <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
-            <button
-              type="button"
-              disabled={isDispatching}
-              onClick={() => setIsDispatchModalOpen(false)}
-              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg cursor-pointer disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isDispatching}
-              className="px-4 py-2 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg cursor-pointer flex items-center gap-2"
-            >
-              {isDispatching && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              <span>{isDispatching ? 'Dispatching...' : 'Confirm Dispatch'}</span>
-            </button>
-          </div>
-        </form>
       </Modal>
 
       {/* CONFIRM DELETE ORDER DIALOG */}

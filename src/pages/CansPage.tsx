@@ -92,16 +92,12 @@ export const CansPage: React.FC = () => {
   // Submit Company Cans Adjustment
   const handleCompanySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!companyForm.reason.trim()) {
-      toast.error('Mandatory audit reason is required');
-      return;
-    }
 
     setSubmitting(true);
     try {
       let payload: any = {
         adjustment_mode: companyForm.adjustment_mode,
-        reason: companyForm.reason.trim(),
+        reason: companyForm.reason.trim() || 'Physical count calibration',
         notes: companyForm.notes.trim() || undefined,
       };
 
@@ -147,10 +143,6 @@ export const CansPage: React.FC = () => {
       toast.error('Please select a customer');
       return;
     }
-    if (!customerForm.reason.trim()) {
-      toast.error('Mandatory audit reason is required');
-      return;
-    }
 
     const qty = Number(customerForm.quantity);
     if (isNaN(qty) || qty < 0) {
@@ -164,7 +156,7 @@ export const CansPage: React.FC = () => {
         customer_id: customerForm.customer_id,
         change_type: customerForm.change_type,
         quantity: qty,
-        reason: customerForm.reason.trim(),
+        reason: customerForm.reason.trim() || 'Customer can balance adjustment',
         notes: customerForm.notes.trim() || undefined,
       });
 
@@ -832,17 +824,16 @@ export const CansPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Mandatory Audit Reason */}
+              {/* Audit Reason */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Mandatory Audit Reason *
+                  Audit Reason (Optional)
                 </label>
                 <input
                   type="text"
-                  required
                   value={companyForm.reason}
                   onChange={(e) => setCompanyForm({ ...companyForm, reason: e.target.value })}
-                  placeholder="e.g. Initial physical count baseline, 100 new cans purchased from supplier, annual plant audit"
+                  placeholder="e.g. Initial physical count baseline, 100 new cans purchased from supplier, annual plant audit (optional)"
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500"
                 />
               </div>
@@ -971,17 +962,16 @@ export const CansPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Mandatory Audit Reason */}
+              {/* Audit Reason */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Mandatory Audit Reason *
+                  Audit Reason (Optional)
                 </label>
                 <input
                   type="text"
-                  required
                   value={customerForm.reason}
                   onChange={(e) => setCustomerForm({ ...customerForm, reason: e.target.value })}
-                  placeholder="e.g. Physical inventory check at customer site, replacement bottle drop, extra guest party issue"
+                  placeholder="e.g. Physical inventory check at customer site, replacement bottle drop, extra guest party issue (optional)"
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500"
                 />
               </div>

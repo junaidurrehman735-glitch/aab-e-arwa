@@ -21,6 +21,7 @@ import {
   Filter,
   Check,
   Loader2,
+  UserCheck,
 } from 'lucide-react';
 
 export const DeliveriesPage: React.FC = () => {
@@ -54,6 +55,12 @@ export const DeliveriesPage: React.FC = () => {
     failure_reason: '',
   });
 
+  // Reassign Rider Modal (Owner / Manager)
+  const [isReassignModalOpen, setIsReassignModalOpen] = useState(false);
+  const [deliveryToReassign, setDeliveryToReassign] = useState<Delivery | null>(null);
+  const [selectedNewRiderId, setSelectedNewRiderId] = useState('');
+  const [isReassigning, setIsReassigning] = useState(false);
+
   // Rapid Submission / Concurrency Lock states
   const [isCompletingDelivery, setIsCompletingDelivery] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
@@ -73,17 +80,24 @@ export const DeliveriesPage: React.FC = () => {
       if (areaFilter) params.append('area', areaFilter);
       if (dateFilter) params.append('date', dateFilter);
 
-      const [delRes, staffRes] = await Promise.all([
-        api.get<Delivery[]>(`/deliveries?${params.toString()}`),
-        api.get<User[]>('/staff'),
-      ]);
-
-      let result = delRes || [];
-      if (isDeliveryBoy && user?.id) {
-        result = result.filter((d: any) => d.driver_id === user.id);
+      const delRes = await api.get<Delivery[]>(`/deliveries?${params.toString()}`);
+      
+      // Load active delivery riders without role permission issues
+      try {
+        const ridersRes = await api.get<User[]>('/staff/riders');
+        if (ridersRes && ridersRes.length > 0) {
+          setDrivers(ridersRes);
+        }
+      } catch (_) {
+        if (!isDeliveryBoy) {
+          try {
+            const staffRes = await api.get<User[]>('/staff');
+            setDrivers(staffRes.filter((s) => s.role_id === 'role-delivery' || s.role_id === 'role-owner'));
+          } catch (_) {}
+        }
       }
-      setDeliveries(result);
-      setDrivers(staffRes.filter((s) => s.role_id === 'role-delivery' || s.role_id === 'role-owner'));
+
+      setDeliveries(delRes || []);
     } catch (err: any) {
       toast.error(err.message || 'Failed to load deliveries');
     } finally {
@@ -150,6 +164,35 @@ export const DeliveriesPage: React.FC = () => {
       toast.error(err.message || 'Failed to update status');
     } finally {
       setIsUpdatingStatus(false);
+    }
+  };
+
+  const openReassignModal = (del: Delivery) => {
+    setDeliveryToReassign(del);
+    setSelectedNewRiderId(del.driver_id || '');
+    setIsReassignModalOpen(true);
+  };
+
+  const handleReassignRider = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deliveryToReassign || !selectedNewRiderId || isReassigning) return;
+    setIsReassigning(true);
+
+    try {
+      await api.put(`/deliveries/${deliveryToReassign.id}/reassign`, {
+        driver_id: selectedNewRiderId,
+      });
+      const newRider = drivers.find((d) => d.id === selectedNewRiderId);
+      toast.success(
+        `Assigned Delivery #${deliveryToReassign.delivery_number} to rider "${newRider?.name || 'Rider'}" in Supabase!`
+      );
+      setIsReassignModalOpen(false);
+      setDeliveryToReassign(null);
+      await fetchDeliveries();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to reassign delivery rider');
+    } finally {
+      setIsReassigning(false);
     }
   };
 
@@ -322,7 +365,7 @@ export const DeliveriesPage: React.FC = () => {
                       </span>
                     </div>
 
-                    {/* Schedule & Driver Details */}
+                    {/* Schedule & Assigned Rider Details */}
                     <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 pt-0.5">
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3 h-3 text-slate-400" />
@@ -333,12 +376,11 @@ export const DeliveriesPage: React.FC = () => {
                         <Clock className="w-3 h-3 text-slate-400" />
                         <span>Time: <strong>{del.delivery_time || 'Morning'}</strong></span>
                       </span>
-                      {!isDeliveryBoy && del.driver_name && (
-                        <>
-                          <span className="text-slate-300">·</span>
-                          <span>Driver: <strong className="text-slate-700">{del.driver_name}</strong></span>
-                        </>
-                      )}
+                      <span className="text-slate-300">·</span>
+                      <span className="inline-flex items-center gap-1 font-semibold text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                        <UserCheck className="w-3 h-3 text-amber-600" />
+                        <span>Assigned Rider: <strong className="text-amber-950">{del.driver_name || 'Unassigned'}</strong></span>
+                      </span>
                       {del.vehicle && (
                         <>
                           <span className="text-slate-300">·</span>
@@ -387,6 +429,18 @@ export const DeliveriesPage: React.FC = () => {
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
+                        {!isDeliveryBoy && (
+                          <button
+                            type="button"
+                            onClick={() => openReassignModal(del)}
+                            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg transition-colors cursor-pointer"
+                            title="Change Assigned Delivery Rider"
+                          >
+                            <UserCheck className="w-3.5 h-3.5" />
+                            <span>Change Rider</span>
+                          </button>
+                        )}
+
                         <button
                           disabled={isCompletingDelivery}
                           onClick={() => openCompleteModal(del)}
@@ -632,6 +686,81 @@ export const DeliveriesPage: React.FC = () => {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* MODAL: CHANGE ASSIGNED RIDER (OWNER / MANAGER) */}
+      <Modal
+        isOpen={isReassignModalOpen}
+        onClose={() => setIsReassignModalOpen(false)}
+        title={
+          deliveryToReassign
+            ? `Change Rider for Delivery #${deliveryToReassign.delivery_number}`
+            : 'Change Assigned Rider'
+        }
+        maxWidth="md"
+      >
+        {deliveryToReassign && (
+          <form onSubmit={handleReassignRider} className="space-y-4">
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg space-y-1.5 text-xs text-slate-600">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Customer:</span>
+                <span className="font-semibold text-slate-900">{deliveryToReassign.customer_name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Area:</span>
+                <span className="font-medium text-slate-800">{deliveryToReassign.customer_area}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Address:</span>
+                <span className="text-slate-700 truncate max-w-xs">{deliveryToReassign.customer_address}</span>
+              </div>
+              <div className="flex justify-between pt-1 border-t border-slate-200">
+                <span className="text-slate-400">Current Rider:</span>
+                <span className="font-bold text-amber-700">{deliveryToReassign.driver_name || 'Unassigned'}</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Select New Delivery Rider <span className="text-rose-500">*</span>
+              </label>
+              <select
+                required
+                value={selectedNewRiderId}
+                onChange={(e) => setSelectedNewRiderId(e.target.value)}
+                className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500 font-medium"
+              >
+                <option value="">-- Select Active Delivery Rider --</option>
+                {drivers.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} — {d.role_name || 'Delivery Boy'} {d.phone ? `(${d.phone})` : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Updates this existing delivery manifest in Supabase without creating duplicates.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsReassignModalOpen(false)}
+                className="px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isReassigning || !selectedNewRiderId}
+                className="px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                {isReassigning && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{isReassigning ? 'Saving Rider...' : 'Save Rider Assignment'}</span>
+              </button>
+            </div>
+          </form>
+        )}
       </Modal>
     </div>
   );

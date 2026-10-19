@@ -1048,12 +1048,37 @@ export const SupabaseDataService = {
   async getProducts(): Promise<Product[]> {
     const supabase = getSupabaseClient();
     if (supabase) {
-      const { data, error } = await supabase.from('products').select('*').order('name');
-      if (!error && data && data.length > 0) {
-        return data as Product[];
-      }
+      try {
+        const [prodsRes, invRes] = await Promise.all([
+          supabase.from('products').select('*').order('name'),
+          supabase.from('inventory').select('*'),
+        ]);
+        if (!prodsRes.error && prodsRes.data && prodsRes.data.length > 0) {
+          const invMap: Record<string, any> = {};
+          (invRes.data || []).forEach((i: any) => {
+            invMap[i.product_id] = i;
+          });
+          return prodsRes.data.map((p: any) => ({
+            ...p,
+            filled_stock: Number(invMap[p.id]?.filled_stock ?? p.filled_stock ?? 0),
+            empty_cans: Number(invMap[p.id]?.empty_cans ?? p.empty_cans ?? 0),
+            is_active: (p.is_active === 1 || p.is_active === true || p.is_active === '1' || p.is_active === undefined || p.is_active === null) ? 1 : 0,
+            is_reusable: (p.is_reusable === 1 || p.is_reusable === true || p.is_reusable === '1') ? 1 : 0,
+          }));
+        }
+      } catch (_) {}
     }
-    return (getMem('products') || []) as Product[];
+    const memProds = getMem('products') || [];
+    const memInv = getMem('inventory') || [];
+    const invMap: Record<string, any> = {};
+    memInv.forEach((i: any) => { invMap[i.product_id] = i; });
+    return memProds.map((p: any) => ({
+      ...p,
+      filled_stock: Number(invMap[p.id]?.filled_stock ?? p.filled_stock ?? 0),
+      empty_cans: Number(invMap[p.id]?.empty_cans ?? p.empty_cans ?? 0),
+      is_active: (p.is_active === 1 || p.is_active === true || p.is_active === '1' || p.is_active === undefined || p.is_active === null) ? 1 : 0,
+      is_reusable: (p.is_reusable === 1 || p.is_reusable === true || p.is_reusable === '1') ? 1 : 0,
+    }));
   },
 
   async createProduct(prod: Partial<Product>): Promise<Product> {
@@ -1121,47 +1146,119 @@ export const SupabaseDataService = {
   async getInventory(): Promise<InventoryItem[]> {
     const supabase = getSupabaseClient();
     if (supabase) {
-      const { data, error } = await supabase.from('inventory').select('*, product:products(*)');
-      if (!error && data && data.length > 0) {
-        return data.map(item => ({
-          ...item,
-          product_name: item.product?.name || '',
-          size: item.product?.size || '',
-          unit: item.product?.unit || '',
-          selling_price: item.product?.selling_price || 0,
-          cost_price: item.product?.cost_price || 0,
-          is_reusable: item.product?.is_reusable ?? 1,
-        }));
-      }
+      try {
+        const [prodsRes, invRes] = await Promise.all([
+          supabase.from('products').select('*').order('created_at'),
+          supabase.from('inventory').select('*'),
+        ]);
+
+        if (!prodsRes.error && prodsRes.data && prodsRes.data.length > 0) {
+          const invMap: Record<string, any> = {};
+          (invRes.data || []).forEach((i: any) => {
+            invMap[i.product_id] = i;
+          });
+
+          const activeProds = prodsRes.data.filter((p: any) => p.is_active === 1 || p.is_active === true || p.is_active === '1');
+          return activeProds.map((p: any) => {
+            const invRow = invMap[p.id];
+            return {
+              id: invRow?.id || `inv-${p.id}`,
+              product_id: p.id,
+              product_name: p.name,
+              size: p.size,
+              unit: p.unit,
+              selling_price: Number(p.selling_price || 0),
+              cost_price: Number(p.cost_price || 0),
+              is_reusable: (p.is_reusable === 1 || p.is_reusable === true) ? 1 : 0,
+              filled_stock: Number(invRow?.filled_stock ?? p.filled_stock ?? 0),
+              empty_cans: Number(invRow?.empty_cans ?? p.empty_cans ?? 0),
+              damaged_cans: Number(invRow?.damaged_cans ?? 0),
+              lost_cans: Number(invRow?.lost_cans ?? 0),
+              updated_at: invRow?.updated_at || p.updated_at || new Date().toISOString(),
+            };
+          });
+        }
+      } catch (_) {}
     }
 
-    return (getMem('inventory') || []) as InventoryItem[];
+    const prods = (getMem('products') || []).filter((p: any) => p.is_active === 1 || p.is_active === true);
+    const invMap: Record<string, any> = {};
+    ((getMem('inventory') || []) as any[]).forEach(i => {
+      invMap[i.product_id] = i;
+    });
+
+    return prods.map((p: any) => {
+      const invRow = invMap[p.id];
+      return {
+        id: invRow?.id || `inv-${p.id}`,
+        product_id: p.id,
+        product_name: p.name,
+        size: p.size,
+        unit: p.unit,
+        selling_price: Number(p.selling_price || 0),
+        cost_price: Number(p.cost_price || 0),
+        is_reusable: (p.is_reusable === 1 || p.is_reusable === true) ? 1 : 0,
+        filled_stock: Number(invRow?.filled_stock ?? p.filled_stock ?? 0),
+        empty_cans: Number(invRow?.empty_cans ?? p.empty_cans ?? 0),
+        damaged_cans: Number(invRow?.damaged_cans ?? 0),
+        lost_cans: Number(invRow?.lost_cans ?? 0),
+        updated_at: invRow?.updated_at || p.updated_at || new Date().toISOString(),
+      };
+    });
   },
 
-  async adjustInventory(adj: { product_id: string; stock_type: string; quantity: number; reason: string }): Promise<void> {
+  async adjustInventory(adj: { product_id: string; stock_type: string; quantity: number; reason?: string }): Promise<void> {
     assertRole(['Owner', 'Manager'], 'adjust inventory stock');
     const supabase = getSupabaseClient();
     const movementId = `mov-${Date.now()}`;
+    const auditReason = adj.reason?.trim() || 'Physical inventory calibration';
+
+    let field = 'filled_stock';
+    if (adj.stock_type === 'empty' || adj.stock_type === 'empty_cans') field = 'empty_cans';
+    else if (adj.stock_type === 'damaged_cans') field = 'damaged_cans';
+    else if (adj.stock_type === 'lost_cans') field = 'lost_cans';
+    else field = 'filled_stock';
 
     if (supabase) {
       // Record movement audit
       await supabase.from('inventory_movements').insert({
         id: movementId,
         product_id: adj.product_id,
-        movement_type: 'manual_adjustment',
+        movement_type: adj.quantity >= 0 ? 'adjustment_increase' : 'adjustment_decrease',
         stock_type: adj.stock_type,
         quantity: adj.quantity,
-        reason: adj.reason,
+        reason: auditReason,
         user_id: getCurrentAuthUser().id,
       });
 
       // Update inventory balance
-      const { data: inv } = await supabase.from('inventory').select('*').eq('product_id', adj.product_id).single();
+      const { data: inv } = await supabase.from('inventory').select('*').eq('product_id', adj.product_id).maybeSingle();
+      const prevStock = inv ? Number(inv[field] || 0) : 0;
+      const updated = Math.max(0, prevStock + adj.quantity);
+
       if (inv) {
-        const field = adj.stock_type === 'filled' ? 'filled_stock' : 'empty_cans';
-        const updated = Math.max(0, (inv[field] || 0) + adj.quantity);
-        await supabase.from('inventory').update({ [field]: updated }).eq('product_id', adj.product_id);
+        await supabase.from('inventory').update({ [field]: updated, updated_at: new Date().toISOString() }).eq('product_id', adj.product_id);
+      } else {
+        await supabase.from('inventory').insert({
+          id: `inv-${Date.now()}`,
+          product_id: adj.product_id,
+          [field]: updated,
+          updated_at: new Date().toISOString(),
+        });
       }
+
+      if (field === 'filled_stock' || field === 'empty_cans') {
+        try {
+          await supabase.from('products').update({ [field]: updated }).eq('id', adj.product_id);
+        } catch (_) {}
+      }
+    }
+
+    const memProds = getMem('products');
+    const targetProd = memProds.find(p => p.id === adj.product_id);
+    if (targetProd && (field === 'filled_stock' || field === 'empty_cans')) {
+      (targetProd as any)[field] = Math.max(0, ((targetProd as any)[field] || 0) + adj.quantity);
+      saveMem('products', memProds);
     }
   },
 
@@ -1275,14 +1372,21 @@ export const SupabaseDataService = {
           total_price: it.quantity * it.unit_price,
         });
       }
-      // Auto-create delivery record
+      // Auto-create delivery record with selected rider
       let customerArea = '';
       try {
         const { data: cust } = await supabase.from('customers').select('area').eq('id', orderData.customer_id).maybeSingle();
         if (cust) customerArea = cust.area;
       } catch (_) {}
-      const staffList = await this.getStaff().catch(() => getMem('users') || []);
-      const autoAssigned = getAssignedDriverForArea(customerArea, staffList);
+
+      let resolvedDriverId = (orderData as any).driver_id;
+      let resolvedVehicle = (orderData as any).vehicle || 'Van #1';
+      if (!resolvedDriverId) {
+        const staffList = await this.getStaff().catch(() => getMem('users') || []);
+        const autoAssigned = getAssignedDriverForArea(customerArea, staffList);
+        resolvedDriverId = autoAssigned.driver_id;
+        resolvedVehicle = autoAssigned.vehicle;
+      }
 
       const delId = `del-${Date.now()}`;
       await supabase.from('deliveries').insert({
@@ -1290,8 +1394,8 @@ export const SupabaseDataService = {
         delivery_number: `DEL-${Date.now().toString().slice(-6)}`,
         order_id: id,
         customer_id: orderData.customer_id,
-        driver_id: autoAssigned.driver_id,
-        vehicle: autoAssigned.vehicle,
+        driver_id: resolvedDriverId,
+        vehicle: resolvedVehicle,
         delivery_date: orderData.delivery_date,
         delivery_time: 'Morning',
         status: 'assigned',
@@ -1678,6 +1782,92 @@ export const SupabaseDataService = {
     }
   },
 
+  async getDeliveryRiders(): Promise<User[]> {
+    const allStaff = await this.getStaff().catch(() => getMem('users') || []);
+    return allStaff.filter((u: any) => (u.role_id === 'role-delivery' || u.role_name === 'Delivery Boy') && u.status !== 'inactive');
+  },
+
+  async reassignDeliveryRider(id: string, driverId: string): Promise<{ success: boolean }> {
+    assertRole(['Owner', 'Manager'], 'reassign delivery rider');
+    const supabase = getSupabaseClient();
+    const nowIso = new Date().toISOString();
+    const staff = await this.getStaff().catch(() => getMem('users') || []);
+    const rider = staff.find((u: any) => u.id === driverId);
+    const vehicle = (rider as any)?.vehicle || 'Van #1';
+
+    if (supabase) {
+      const { error } = await supabase.from('deliveries').update({
+        driver_id: driverId,
+        vehicle,
+        updated_at: nowIso,
+      }).eq('id', id);
+      if (error) {
+        throw new Error(error.message);
+      }
+    }
+
+    const current = getMem('deliveries');
+    const del = current.find((d: any) => d.id === id);
+    if (del) {
+      del.driver_id = driverId;
+      del.driver_name = rider?.name || 'Assigned Driver';
+      del.vehicle = vehicle;
+      saveMem('deliveries', current);
+    }
+    return { success: true };
+  },
+
+  async reassignDeliveryRiderForOrder(orderId: string, driverId: string): Promise<{ success: boolean }> {
+    assertRole(['Owner', 'Manager'], 'reassign delivery rider');
+    const supabase = getSupabaseClient();
+    const nowIso = new Date().toISOString();
+    const staff = await this.getStaff().catch(() => getMem('users') || []);
+    const rider = staff.find((u: any) => u.id === driverId);
+    const vehicle = (rider as any)?.vehicle || 'Van #1';
+
+    if (supabase) {
+      const { data: existingDel } = await supabase.from('deliveries').select('id').eq('order_id', orderId).maybeSingle();
+      if (existingDel) {
+        await supabase.from('deliveries').update({
+          driver_id: driverId,
+          vehicle,
+          updated_at: nowIso,
+        }).eq('id', existingDel.id);
+      } else {
+        const { data: ord } = await supabase.from('orders').select('*').eq('id', orderId).maybeSingle();
+        if (ord) {
+          const deliveryId = `del-${Date.now()}`;
+          const deliveryNumber = `DEL-${Date.now().toString().slice(-6)}`;
+          await supabase.from('deliveries').insert({
+            id: deliveryId,
+            delivery_number: deliveryNumber,
+            order_id: orderId,
+            customer_id: ord.customer_id,
+            driver_id: driverId,
+            vehicle,
+            delivery_date: ord.delivery_date || nowIso.split('T')[0],
+            delivery_time: 'Morning',
+            status: 'assigned',
+            empty_cans_returned: 0,
+            payment_collected: 0,
+            payment_method: ord.payment_type || 'Cash',
+            notes: ord.notes || '',
+          });
+        }
+      }
+    }
+
+    const current = getMem('deliveries');
+    const del = current.find((d: any) => d.order_id === orderId);
+    if (del) {
+      del.driver_id = driverId;
+      del.driver_name = rider?.name || 'Assigned Driver';
+      del.vehicle = vehicle;
+      saveMem('deliveries', current);
+    }
+    return { success: true };
+  },
+
   // 9. EMPTY CAN ASSET TRACKING
   async getCanSummary(): Promise<any> {
     const supabase = getSupabaseClient();
@@ -1811,7 +2001,7 @@ export const SupabaseDataService = {
     empty_cans?: number;
     damaged_cans?: number;
     lost_cans?: number;
-    reason: string;
+    reason?: string;
     notes?: string;
   }): Promise<void> {
     assertRole(['Owner', 'Manager'], 'adjust total company can physical assets');
@@ -1860,7 +2050,7 @@ export const SupabaseDataService = {
         quantity: totalDelta,
         previous_stock: curTotal,
         new_stock: newTotal,
-        reason: `${adj.reason}${adj.notes ? ` - ${adj.notes}` : ''}`,
+        reason: `${adj.reason || 'Company asset adjustment'}${adj.notes ? ` - ${adj.notes}` : ''}`,
         reference_type: 'company_asset_adjustment',
         user_id: user.id || null,
       });

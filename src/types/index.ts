@@ -196,6 +196,9 @@ export interface Order {
   created_by_name?: string;
   created_at: string;
   items?: OrderItem[];
+  driver_id?: string;
+  driver_name?: string;
+  delivery?: Delivery;
 }
 
 export interface DeliveryItem {

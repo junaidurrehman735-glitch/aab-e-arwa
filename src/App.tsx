@@ -74,7 +74,7 @@ function MainLayout() {
     dashboard: 'Operations Dashboard',
     customers: 'Customer Accounts',
     products: 'Products & Bottle Sizes',
-    inventory: 'Stock & Warehouse',
+    inventory: 'Warehouse Inventory',
     orders: 'Customer Orders',
     deliveries: 'Delivery Logistics & Routes',
     cans: 'Empty Can Asset Reconciliation',

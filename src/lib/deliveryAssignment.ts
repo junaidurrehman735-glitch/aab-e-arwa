@@ -24,8 +24,8 @@ export function getAssignedDriverForArea(
 
   if (drivers.length === 0) {
     return {
-      driver_id: '89198262-90b1-4e0d-adcc-63091463ba52',
-      driver_name: 'kakar1',
+      driver_id: '',
+      driver_name: 'Unassigned',
       vehicle: 'Van #1',
     };
   }

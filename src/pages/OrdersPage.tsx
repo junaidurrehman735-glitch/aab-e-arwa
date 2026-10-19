@@ -66,9 +66,15 @@ export const OrdersPage: React.FC = () => {
     { product_id: string; quantity: number; unit_price: number }[]
   >([]);
   const [deliveryDate, setDeliveryDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedRiderId, setSelectedRiderId] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [paymentType, setPaymentType] = useState<'Cash' | 'Credit'>('Cash');
   const [notes, setNotes] = useState('');
+
+  // Reassign Rider in Order Details
+  const [isReassigningOrderRider, setIsReassigningOrderRider] = useState(false);
+  const [reassignOrderRiderId, setReassignOrderRiderId] = useState('');
+  const [isChangeRiderInOrderOpen, setIsChangeRiderInOrderOpen] = useState(false);
 
   // Delete Order State
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -93,16 +99,30 @@ export const OrdersPage: React.FC = () => {
       const params = new URLSearchParams();
       if (statusFilter) params.append('status', statusFilter);
 
-      const [ordRes, custRes, prodRes, staffRes] = await Promise.all([
+      const [ordRes, custRes, prodRes] = await Promise.all([
         api.get<Order[]>(`/orders?${params.toString()}`),
         api.get<Customer[]>('/customers'),
         api.get<Product[]>('/products'),
-        api.get<User[]>('/staff'),
       ]);
       setOrders(ordRes);
       setCustomers(custRes);
       setProducts(prodRes);
-      setDrivers(staffRes.filter((s) => s.role_id === 'role-delivery' || s.role_id === 'role-owner'));
+
+      // Load active Delivery Boy staff accounts
+      try {
+        const ridersRes = await api.get<User[]>('/staff/riders');
+        if (ridersRes && ridersRes.length > 0) {
+          setDrivers(ridersRes);
+        } else {
+          const staffRes = await api.get<User[]>('/staff');
+          setDrivers(staffRes.filter((s) => s.role_id === 'role-delivery' || s.role_name === 'Delivery Boy'));
+        }
+      } catch (_) {
+        try {
+          const staffRes = await api.get<User[]>('/staff');
+          setDrivers(staffRes.filter((s) => s.role_id === 'role-delivery' || s.role_name === 'Delivery Boy'));
+        } catch (_) {}
+      }
     } catch (err: any) {
       toast.error(err.message || 'Failed to load orders');
     } finally {
@@ -140,6 +160,7 @@ export const OrdersPage: React.FC = () => {
     setIsCreateCustomerOpen(false);
     setOrderLines([]);
     setDeliveryDate(new Date().toISOString().split('T')[0]);
+    setSelectedRiderId('');
     setDeliveryAddress('');
     setPaymentType('Cash');
     setNotes('');
@@ -314,6 +335,10 @@ export const OrdersPage: React.FC = () => {
       toast.error('Please select a customer');
       return;
     }
+    if (!selectedRiderId) {
+      toast.error('Assign Delivery Rider * is required. Please select an active delivery rider.');
+      return;
+    }
     if (orderLines.length === 0) {
       toast.error('Please add at least one product item');
       return;
@@ -342,6 +367,7 @@ export const OrdersPage: React.FC = () => {
         customer_name: orderCustomer.name.replace(' (Temp)', ''),
         customer_phone: orderCustomer.phone,
         customer_area: orderCustomer.area,
+        driver_id: selectedRiderId,
         delivery_address: deliveryAddress || orderCustomer.address,
         items: orderLines,
         delivery_date: deliveryDate,
@@ -351,7 +377,8 @@ export const OrdersPage: React.FC = () => {
         'x-idempotency-key': idempotencyKey,
       });
 
-      toast.success(`Order #${res.orderNumber} placed and confirmed!`);
+      const assignedRider = drivers.find((d) => d.id === selectedRiderId);
+      toast.success(`Order #${res.orderNumber} placed & assigned to rider "${assignedRider?.name || 'Rider'}" in Supabase!`);
       setIsAddModalOpen(false);
       fetchData();
     } catch (err: any) {
@@ -361,12 +388,32 @@ export const OrdersPage: React.FC = () => {
     }
   };
 
+  const handleReassignOrderRider = async () => {
+    if (!selectedOrder || !reassignOrderRiderId || isReassigningOrderRider) return;
+    setIsReassigningOrderRider(true);
+    try {
+      await api.put(`/orders/${selectedOrder.id}/reassign-rider`, { driver_id: reassignOrderRiderId });
+      const newRider = drivers.find((d) => d.id === reassignOrderRiderId);
+      toast.success(`Assigned Order #${selectedOrder.order_number} to rider "${newRider?.name || 'Rider'}" in Supabase!`);
+      setIsChangeRiderInOrderOpen(false);
+      const updatedDetails = await api.get(`/orders/${selectedOrder.id}`);
+      setOrderDetails(updatedDetails);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to reassign rider');
+    } finally {
+      setIsReassigningOrderRider(false);
+    }
+  };
+
   const viewOrder = async (ord: Order) => {
     setSelectedOrder(ord);
+    setIsChangeRiderInOrderOpen(false);
     setIsDetailsModalOpen(true);
     try {
       const res = await api.get(`/orders/${ord.id}`);
       setOrderDetails(res);
+      setReassignOrderRiderId((res as any)?.delivery?.driver_id || (res as any)?.order?.driver_id || '');
     } catch (err: any) {
       toast.error(err.message || 'Failed to load order details');
     }
@@ -499,6 +546,12 @@ export const OrdersPage: React.FC = () => {
                       </div>
                       <div className="text-[11px] text-slate-500 truncate max-w-xs mt-0.5">
                         {ord.customer_area}: {ord.delivery_address}
+                      </div>
+                      <div className="mt-1 flex items-center gap-1">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-900 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                          <UserCheck className="w-3 h-3 text-amber-600" />
+                          <span>Rider: {ord.driver_name || 'Assigned'}</span>
+                        </span>
                       </div>
                     </td>
 
@@ -1112,6 +1165,40 @@ export const OrdersPage: React.FC = () => {
               </select>
             </div>
 
+            {/* Assign Delivery Rider * */}
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Assign Delivery Rider <span className="text-rose-500">*</span>
+              </label>
+              <select
+                required
+                value={selectedRiderId}
+                onChange={(e) => setSelectedRiderId(e.target.value)}
+                className={`w-full px-3 py-2 text-xs bg-white border rounded-lg focus:outline-hidden focus:ring-1 focus:ring-sky-500 font-medium ${
+                  !selectedRiderId ? 'border-amber-400 bg-amber-50/20 ring-1 ring-amber-200' : 'border-slate-200'
+                }`}
+              >
+                <option value="">-- Select Active Delivery Rider * --</option>
+                {drivers.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} — {d.role_name || 'Delivery Boy'} {d.phone ? `(${d.phone})` : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate-500 mt-1">
+                {selectedRiderId ? (
+                  <span className="text-emerald-700 font-medium flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Assigned to rider: <strong>{drivers.find((d) => d.id === selectedRiderId)?.name}</strong></span>
+                  </span>
+                ) : (
+                  <span className="text-amber-600">
+                    * Required. Only active staff members with the Delivery Boy role appear here.
+                  </span>
+                )}
+              </p>
+            </div>
+
             <div className="sm:col-span-2">
               <label className="block text-xs font-semibold text-slate-700 mb-1">Delivery Address *</label>
               <input
@@ -1275,12 +1362,60 @@ export const OrdersPage: React.FC = () => {
             </div>
 
             {orderDetails.delivery && (
-              <div className="p-3 bg-sky-50 rounded-lg border border-sky-100 flex items-center justify-between">
-                <div>
-                  <span className="text-[11px] font-semibold text-sky-900 block">Assigned Delivery Manifest</span>
-                  <span className="text-xs text-sky-700">Driver: {orderDetails.delivery.driver_name || 'Assigned'}</span>
+              <div className="space-y-2">
+                <div className="p-3 bg-sky-50 rounded-lg border border-sky-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[11px] font-semibold text-sky-900 block">Assigned Delivery Manifest</span>
+                    <span className="text-xs text-sky-800 flex items-center gap-1.5 mt-0.5">
+                      <UserCheck className="w-3.5 h-3.5 text-sky-600" />
+                      <span>Assigned Rider: <strong className="text-slate-900">{orderDetails.delivery.driver_name || orderDetails.order?.driver_name || 'Assigned'}</strong></span>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="info">{orderDetails.delivery.status}</Badge>
+                    {hasPermission('deliveries', 'can_edit') && orderDetails.delivery.status !== 'delivered' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReassignOrderRiderId(orderDetails.delivery.driver_id || '');
+                          setIsChangeRiderInOrderOpen(!isChangeRiderInOrderOpen);
+                        }}
+                        className="px-2.5 py-1 text-xs font-semibold text-sky-700 bg-white hover:bg-sky-50 border border-sky-200 rounded-md transition-colors cursor-pointer"
+                      >
+                        {isChangeRiderInOrderOpen ? 'Cancel' : 'Change Rider'}
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <Badge variant="info">{orderDetails.delivery.status}</Badge>
+
+                {isChangeRiderInOrderOpen && (
+                  <div className="p-3 bg-white border border-sky-200 rounded-lg space-y-2 shadow-xs">
+                    <label className="block text-xs font-semibold text-slate-800">Assign Different Delivery Rider</label>
+                    <div className="flex gap-2">
+                      <select
+                        value={reassignOrderRiderId}
+                        onChange={(e) => setReassignOrderRiderId(e.target.value)}
+                        className="flex-1 px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md font-medium"
+                      >
+                        <option value="">-- Select Active Delivery Rider --</option>
+                        {drivers.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.name} — {d.role_name || 'Delivery Boy'} {d.phone ? `(${d.phone})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={isReassigningOrderRider || !reassignOrderRiderId}
+                        onClick={handleReassignOrderRider}
+                        className="px-3 py-1.5 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 disabled:opacity-50 rounded-md cursor-pointer flex items-center gap-1 shadow-xs"
+                      >
+                        {isReassigningOrderRider && <Loader2 className="w-3 h-3 animate-spin" />}
+                        <span>Save Rider</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

@@ -12,7 +12,7 @@ import {
   saveIdempotencyRecord,
   runWithLock,
 } from './db.ts';
-import type { User, Customer, Product, Delivery, Order, Permission, AuditLog } from '../types/index.ts';
+import type { User, Customer, Product, InventoryItem, Delivery, Order, Permission, AuditLog } from '../types/index.ts';
 import { getPakistanDateRange, isTimestampInRange, type DashboardPeriod } from '../lib/pakistanDate.ts';
 import { getAssignedDriverForArea } from '../lib/deliveryAssignment.ts';
 
@@ -42,7 +42,13 @@ async function getAuthUserFromRequest(req: Request): Promise<User | null> {
             userRecord = db.users.find(u => u.email.toLowerCase() === authUser.email!.toLowerCase());
             if (userRecord) {
               // Permanently link UUID
+              const oldId = userRecord.id;
               userRecord.id = authUser.id;
+              if (oldId && oldId !== authUser.id) {
+                db.deliveries.forEach((d: any) => {
+                  if (d.driver_id === oldId) d.driver_id = authUser.id;
+                });
+              }
               saveDatabase(db);
               return userRecord;
             }
@@ -253,7 +259,13 @@ apiRouter.post('/auth/resolve', async (req: Request, res: Response) => {
       matchedUser = db.users.find(u => u.email.toLowerCase() === authEmail);
       if (matchedUser) {
         // Link permanent UUID
+        const oldId = matchedUser.id;
         matchedUser.id = authUserId;
+        if (oldId && oldId !== authUserId) {
+          db.deliveries.forEach((d: any) => {
+            if (d.driver_id === oldId) d.driver_id = authUserId;
+          });
+        }
         saveDatabase(db);
       }
     }
@@ -486,6 +498,51 @@ apiRouter.get('/staff', async (req: Request, res: Response) => {
   if (!authorized) return;
   const db = loadDatabase();
   return res.json(db.users);
+});
+
+// Endpoint to fetch active Delivery Boys for order assignment (Owner, Manager, and staff can access)
+apiRouter.get('/staff/riders', async (req: Request, res: Response) => {
+  const authUser = await getAuthUserFromRequest(req);
+  if (!authUser) {
+    return res.status(401).json({ message: 'Authentication required' });
+  }
+  const db = loadDatabase();
+  const riders = db.users
+    .filter(u => (u.role_id === 'role-delivery' || u.role_name === 'Delivery Boy') && u.status !== 'inactive')
+    .map(u => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      phone: u.phone || '',
+      role_id: u.role_id,
+      role_name: u.role_name || 'Delivery Boy',
+      vehicle: (u as any).vehicle || 'Van #1',
+      status: u.status || 'active',
+      area: (u as any).area || '',
+    }));
+  return res.json(riders);
+});
+
+apiRouter.get('/riders', async (req: Request, res: Response) => {
+  const authUser = await getAuthUserFromRequest(req);
+  if (!authUser) {
+    return res.status(401).json({ message: 'Authentication required' });
+  }
+  const db = loadDatabase();
+  const riders = db.users
+    .filter(u => (u.role_id === 'role-delivery' || u.role_name === 'Delivery Boy') && u.status !== 'inactive')
+    .map(u => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      phone: u.phone || '',
+      role_id: u.role_id,
+      role_name: u.role_name || 'Delivery Boy',
+      vehicle: (u as any).vehicle || 'Van #1',
+      status: u.status || 'active',
+      area: (u as any).area || '',
+    }));
+  return res.json(riders);
 });
 
 apiRouter.post('/staff', async (req: Request, res: Response) => {
@@ -1326,16 +1383,82 @@ apiRouter.delete('/products/:id', async (req: Request, res: Response) => {
 
 apiRouter.get('/inventory', async (req: Request, res: Response) => {
   const supabase = getServerSupabase();
+  let inventoryItems: InventoryItem[] = [];
+  let fetchedFromSupabase = false;
+
   if (supabase) {
     try {
-      const { data, error } = await supabase.from('inventory').select('*');
-      if (!error && data) {
-        return res.json(data);
+      const [prodsRes, invRes] = await Promise.all([
+        supabase.from('products').select('*').order('created_at'),
+        supabase.from('inventory').select('*'),
+      ]);
+
+      if (!prodsRes.error && prodsRes.data && prodsRes.data.length > 0) {
+        const invMap: Record<string, any> = {};
+        (invRes.data || []).forEach((i: any) => {
+          invMap[i.product_id] = i;
+        });
+
+        const activeProds = prodsRes.data.filter((p: any) => p.is_active === 1 || p.is_active === true || p.is_active === '1');
+
+        inventoryItems = activeProds.map((p: any) => {
+          const invRow = invMap[p.id];
+          return {
+            id: invRow?.id || `inv-${p.id}`,
+            product_id: p.id,
+            product_name: p.name,
+            size: p.size,
+            unit: p.unit,
+            selling_price: Number(p.selling_price || 0),
+            cost_price: Number(p.cost_price || 0),
+            is_reusable: (p.is_reusable === 1 || p.is_reusable === true) ? 1 : 0,
+            filled_stock: Number(invRow?.filled_stock ?? p.filled_stock ?? 0),
+            empty_cans: Number(invRow?.empty_cans ?? p.empty_cans ?? 0),
+            damaged_cans: Number(invRow?.damaged_cans ?? 0),
+            lost_cans: Number(invRow?.lost_cans ?? 0),
+            updated_at: invRow?.updated_at || p.updated_at || new Date().toISOString(),
+          };
+        });
+        fetchedFromSupabase = true;
+
+        const db = loadDatabase();
+        db.inventory = inventoryItems;
+        saveDatabase(db);
       }
-    } catch (_) {}
+    } catch (err: any) {
+      console.warn('[API /inventory] Supabase notice:', err?.message || err);
+    }
   }
-  const db = loadDatabase();
-  return res.json(db.inventory);
+
+  if (!fetchedFromSupabase) {
+    const db = loadDatabase();
+    const invMap: Record<string, any> = {};
+    (db.inventory || []).forEach((i: any) => {
+      invMap[i.product_id] = i;
+    });
+
+    const activeProds = (db.products || []).filter((p: any) => p.is_active === 1 || p.is_active === true);
+    inventoryItems = activeProds.map((p: any) => {
+      const invRow = invMap[p.id];
+      return {
+        id: invRow?.id || `inv-${p.id}`,
+        product_id: p.id,
+        product_name: p.name,
+        size: p.size,
+        unit: p.unit,
+        selling_price: Number(p.selling_price || 0),
+        cost_price: Number(p.cost_price || 0),
+        is_reusable: (p.is_reusable === 1 || p.is_reusable === true) ? 1 : 0,
+        filled_stock: Number(invRow?.filled_stock ?? p.filled_stock ?? 0),
+        empty_cans: Number(invRow?.empty_cans ?? p.empty_cans ?? 0),
+        damaged_cans: Number(invRow?.damaged_cans ?? 0),
+        lost_cans: Number(invRow?.lost_cans ?? 0),
+        updated_at: invRow?.updated_at || p.updated_at || new Date().toISOString(),
+      };
+    });
+  }
+
+  return res.json(inventoryItems);
 });
 
 apiRouter.get('/inventory/movements', async (req: Request, res: Response) => {
@@ -1358,12 +1481,21 @@ apiRouter.get('/inventory/movements', async (req: Request, res: Response) => {
 
 apiRouter.post('/inventory/adjust', async (req: Request, res: Response) => {
   try {
-    const { product_id, stock_type = 'filled', adjustment, quantity, reason, user_name } = req.body;
+    const { product_id, stock_type = 'filled_stock', adjustment, quantity, reason, user_name } = req.body;
     const delta = Number(adjustment !== undefined ? adjustment : quantity);
 
     if (isNaN(delta)) {
       return res.status(400).json({ message: 'Valid adjustment number is required' });
     }
+
+    // Reason is optional
+    const auditReason = (reason && String(reason).trim()) ? String(reason).trim() : 'Physical inventory calibration';
+
+    let field: string = 'filled_stock';
+    if (stock_type === 'empty' || stock_type === 'empty_cans') field = 'empty_cans';
+    else if (stock_type === 'damaged_cans') field = 'damaged_cans';
+    else if (stock_type === 'lost_cans') field = 'lost_cans';
+    else field = 'filled_stock';
 
     const supabase = getServerSupabase();
     let prevStock = 0;
@@ -1378,7 +1510,6 @@ apiRouter.post('/inventory/adjust', async (req: Request, res: Response) => {
         .eq('product_id', product_id)
         .maybeSingle();
 
-      const field = stock_type === 'empty' ? 'empty_cans' : 'filled_stock';
       prevStock = invRow ? Number(invRow[field] || 0) : 0;
       newStock = Math.max(0, prevStock + delta);
 
@@ -1411,6 +1542,13 @@ apiRouter.post('/inventory/adjust', async (req: Request, res: Response) => {
         }
       }
 
+      // Also keep products table synchronized with stock
+      if (field === 'filled_stock' || field === 'empty_cans') {
+        try {
+          await supabase.from('products').update({ [field]: newStock, updated_at: nowIso }).eq('id', product_id);
+        } catch (_) {}
+      }
+
       // 2. Insert audit trail in inventory_movements table
       const { error: movErr } = await supabase
         .from('inventory_movements')
@@ -1422,7 +1560,7 @@ apiRouter.post('/inventory/adjust', async (req: Request, res: Response) => {
           quantity: delta,
           previous_stock: prevStock,
           new_stock: newStock,
-          reason: reason || 'Manual Stock Adjustment',
+          reason: auditReason,
           reference_type: 'manual_adjustment',
           user_id: user_name || 'Owner',
           created_at: nowIso,
@@ -1439,9 +1577,16 @@ apiRouter.post('/inventory/adjust', async (req: Request, res: Response) => {
     const db = loadDatabase();
     let inv = db.inventory.find(i => i.product_id === product_id) as any;
     if (!inv) {
+      const prodRef = db.products.find(p => p.id === product_id);
       inv = {
         id: `inv-${Date.now()}`,
         product_id,
+        product_name: prodRef?.name || '',
+        size: prodRef?.size || '',
+        unit: prodRef?.unit || '',
+        selling_price: prodRef?.selling_price || 0,
+        cost_price: prodRef?.cost_price || 0,
+        is_reusable: prodRef?.is_reusable ?? 1,
         filled_stock: 0,
         empty_cans: 0,
         damaged_cans: 0,
@@ -1450,23 +1595,31 @@ apiRouter.post('/inventory/adjust', async (req: Request, res: Response) => {
       };
       db.inventory.push(inv);
     }
-    const field = stock_type === 'empty' ? 'empty_cans' : 'filled_stock';
+    if (!supabase) {
+      prevStock = Number(inv[field] || 0);
+      newStock = Math.max(0, prevStock + delta);
+    }
     inv[field] = newStock;
     inv.updated_at = nowIso;
 
-    // Also update product card filled_stock
+    // Also update product card filled_stock / empty_cans so catalog and inventory are synchronized
     const prod = db.products.find(p => p.id === product_id);
-    if (prod && stock_type === 'filled') {
-      prod.filled_stock = newStock;
+    if (prod) {
+      if (field === 'filled_stock') prod.filled_stock = newStock;
+      else if (field === 'empty_cans') prod.empty_cans = newStock;
+      (prod as any).updated_at = nowIso;
     }
 
     db.inventory_movements.unshift({
       id: `mov-${Date.now()}`,
       product_id,
+      product_name: prod?.name || inv?.product_name || '',
       movement_type: delta >= 0 ? 'adjustment_increase' : 'adjustment_decrease',
       stock_type,
       quantity: delta,
-      reason: reason || '',
+      previous_stock: prevStock,
+      new_stock: newStock,
+      reason: auditReason,
       created_at: nowIso,
     } as any);
     saveDatabase(db);
@@ -1477,19 +1630,22 @@ apiRouter.post('/inventory/adjust', async (req: Request, res: Response) => {
       action: act,
       module: 'inventory',
       record_ref: product_id,
-      details: `Stock adjustment for "${prod?.name || product_id}": ${stock_type} stock adjusted from ${prevStock} to ${newStock} (${delta >= 0 ? '+' : ''}${delta}) | Reason: ${reason || 'Manual Adjustment'}`,
-      old_value: { product_id, stock_type, stock: prevStock },
-      new_value: { product_id, stock_type, stock: newStock, delta, reason: reason || 'Manual Adjustment' },
+      details: `Stock adjustment for "${prod?.name || product_id}": ${stock_type} stock adjusted from ${prevStock} to ${newStock} (${delta >= 0 ? '+' : ''}${delta}) | Reason: ${auditReason}`,
+      old_value: { [field]: prevStock },
+      new_value: { [field]: newStock },
     });
 
     return res.json({
       success: true,
+      product_id,
       previous_stock: prevStock,
-      adjustment: delta,
       new_stock: newStock,
+      delta,
+      field,
     });
   } catch (err: any) {
-    return res.status(500).json({ message: err.message });
+    console.error('[API /inventory/adjust] Exception:', err);
+    return res.status(500).json({ message: err.message || 'Failed to adjust stock' });
   }
 });
 
@@ -1631,22 +1787,32 @@ apiRouter.get('/orders', async (req: Request, res: Response) => {
 
       const { data, error } = await query;
       if (!error && data) {
-        orders = data.map((o: any) => ({
-          ...o,
-          customer_name: o.customer?.name || '',
-          customer_phone: o.customer?.phone || '',
-          customer_area: o.customer?.area || '',
-          items: (o.items || []).map((it: any) => ({
-            ...it,
-            product_name: it.product?.name || '',
-            size: it.product?.size || '',
-            unit: it.product?.unit || '',
-          })),
-        }));
+        const db = loadDatabase();
+        const staffMap: Record<string, string> = {};
+        db.users.forEach((u: any) => { staffMap[u.id] = u.name; });
+
+        orders = data.map((o: any) => {
+          const del = db.deliveries.find(d => d.order_id === o.id);
+          const driverName = del?.driver_id ? (staffMap[del.driver_id] || del.driver_name || 'Assigned Driver') : (o.driver_name || null);
+          return {
+            ...o,
+            customer_name: o.customer?.name || '',
+            customer_phone: o.customer?.phone || '',
+            customer_area: o.customer?.area || '',
+            driver_id: del?.driver_id || o.driver_id || null,
+            driver_name: driverName,
+            delivery: del || null,
+            items: (o.items || []).map((it: any) => ({
+              ...it,
+              product_name: it.product?.name || '',
+              size: it.product?.size || '',
+              unit: it.product?.unit || '',
+            })),
+          };
+        });
         fetchedFromSupabase = true;
 
         // Keep local central db in sync
-        const db = loadDatabase();
         db.orders = orders;
         saveDatabase(db);
       } else if (error) {
@@ -1659,7 +1825,20 @@ apiRouter.get('/orders', async (req: Request, res: Response) => {
 
   if (!fetchedFromSupabase) {
     const db = loadDatabase();
-    orders = db.orders || [];
+    const staffMap: Record<string, string> = {};
+    db.users.forEach((u: any) => { staffMap[u.id] = u.name; });
+
+    orders = (db.orders || []).map((o: any) => {
+      const del = db.deliveries.find(d => d.order_id === o.id);
+      const driverName = del?.driver_id ? (staffMap[del.driver_id] || del.driver_name || 'Assigned Driver') : (o.driver_name || null);
+      return {
+        ...o,
+        driver_id: del?.driver_id || o.driver_id || null,
+        driver_name: driverName,
+        delivery: del || null,
+      };
+    });
+
     if (statusFilter) {
       orders = orders.filter((o: any) => o.order_status === statusFilter);
     }
@@ -1671,6 +1850,10 @@ apiRouter.get('/orders', async (req: Request, res: Response) => {
 apiRouter.get('/orders/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const supabase = getServerSupabase();
+  const db = loadDatabase();
+  const staffMap: Record<string, string> = {};
+  db.users.forEach((u: any) => { staffMap[u.id] = u.name; });
+  const linkedDel = db.deliveries.find(d => d.order_id === id);
 
   if (supabase) {
     try {
@@ -1688,11 +1871,14 @@ apiRouter.get('/orders/:id', async (req: Request, res: Response) => {
         .maybeSingle();
 
       if (!error && data) {
+        const driverName = linkedDel?.driver_id ? (staffMap[linkedDel.driver_id] || linkedDel.driver_name || 'Assigned Driver') : (data.driver_name || null);
         const order = {
           ...data,
           customer_name: data.customer?.name || '',
           customer_phone: data.customer?.phone || '',
           customer_area: data.customer?.area || '',
+          driver_id: linkedDel?.driver_id || data.driver_id || null,
+          driver_name: driverName,
         };
         const items = (data.items || []).map((it: any) => ({
           ...it,
@@ -1700,16 +1886,18 @@ apiRouter.get('/orders/:id', async (req: Request, res: Response) => {
           size: it.product?.size || '',
           unit: it.product?.unit || '',
         }));
-        return res.json({ order, items });
+        return res.json({ order, items, delivery: linkedDel || null });
       }
     } catch (_) {}
   }
 
-  const db = loadDatabase();
   const order = db.orders.find(o => o.id === id);
   if (!order) return res.status(404).json({ message: 'Order not found' });
+  const driverName = linkedDel?.driver_id ? (staffMap[linkedDel.driver_id] || linkedDel.driver_name || 'Assigned Driver') : (order.driver_name || null);
+  order.driver_id = linkedDel?.driver_id || order.driver_id || null;
+  order.driver_name = driverName;
   const items = db.order_items.filter(it => it.order_id === id);
-  return res.json({ order, items });
+  return res.json({ order, items, delivery: linkedDel || null });
 });
 
 apiRouter.post('/orders', async (req: Request, res: Response) => {
@@ -1738,6 +1926,8 @@ apiRouter.post('/orders', async (req: Request, res: Response) => {
       const supabase = getServerSupabase();
       const id = `ord-${Date.now()}`;
       const orderNumber = `ORD-${Date.now().toString().slice(-6)}`;
+      const deliveryId = `del-${Date.now()}`;
+      const deliveryNumber = `DEL-${Date.now().toString().slice(-6)}`;
       const total_amount = (orderData.items || []).reduce(
         (s: number, it: any) => s + (Number(it.quantity || 0) * Number(it.unit_price || 0)),
         0
@@ -1813,15 +2003,28 @@ apiRouter.post('/orders', async (req: Request, res: Response) => {
 
         const cust = db.customers.find(c => c.id === customerId);
         const customerArea = orderData.customer_area || cust?.area || '';
-        const autoAssigned = getAssignedDriverForArea(customerArea, db.users);
-        const driverId = orderData.driver_id || autoAssigned.driver_id;
-        const vehicle = orderData.vehicle || autoAssigned.vehicle;
+
+        // Resolve rider explicitly selected from the order form (SOURCE OF TRUTH)
+        let resolvedDriverId = orderData.driver_id;
+        let driverUser = resolvedDriverId ? db.users.find(u => u.id === resolvedDriverId) : null;
+        if (!driverUser && resolvedDriverId) {
+          driverUser = db.users.find(u => u.email?.toLowerCase() === resolvedDriverId.toLowerCase() || u.name?.toLowerCase() === resolvedDriverId.toLowerCase());
+          if (driverUser) resolvedDriverId = driverUser.id;
+        }
+
+        if (!resolvedDriverId || !driverUser) {
+          const autoAssigned = getAssignedDriverForArea(customerArea, db.users);
+          resolvedDriverId = autoAssigned.driver_id;
+          driverUser = db.users.find(u => u.id === resolvedDriverId);
+        }
+
+        const driverId = resolvedDriverId;
+        const driverName = driverUser ? driverUser.name : 'Assigned Driver';
+        const vehicle = (driverUser as any)?.vehicle || orderData.vehicle || 'Van #1';
 
         const { data: existingDel } = await supabase.from('deliveries').select('id').eq('order_id', id).maybeSingle();
 
         if (!existingDel) {
-          const deliveryId = `del-${Date.now()}`;
-          const deliveryNumber = `DEL-${Date.now().toString().slice(-6)}`;
           const cleanDeliveryRow = {
             id: deliveryId,
             delivery_number: deliveryNumber,
@@ -1853,7 +2056,7 @@ apiRouter.post('/orders', async (req: Request, res: Response) => {
             supabase.from('delivery_items').insert(delItems),
           ]);
 
-          console.log(`[ORDER] Created in Supabase: #${orderNumber} (${id}) with Auto-assigned Delivery: #${deliveryNumber} to driver ${driverId}`);
+          console.log(`[ORDER] Created in Supabase: #${orderNumber} (${id}) with Assigned Delivery: #${deliveryNumber} to rider "${driverName}" (${driverId})`);
         } else {
           await supabase.from('order_items').insert(cleanItems);
         }
@@ -1862,16 +2065,29 @@ apiRouter.post('/orders', async (req: Request, res: Response) => {
       // Keep central database aligned
       const cust = db.customers.find(c => c.id === customerId);
       const customerArea = orderData.customer_area || cust?.area || '';
-      const autoAssigned = getAssignedDriverForArea(customerArea, db.users);
-      const driverId = orderData.driver_id || autoAssigned.driver_id;
-      const driverName = autoAssigned.driver_name;
-      const vehicle = orderData.vehicle || autoAssigned.vehicle;
+
+      let resolvedDriverId = orderData.driver_id;
+      let driverUser = resolvedDriverId ? db.users.find(u => u.id === resolvedDriverId) : null;
+      if (!driverUser && resolvedDriverId) {
+        driverUser = db.users.find(u => u.email?.toLowerCase() === resolvedDriverId.toLowerCase() || u.name?.toLowerCase() === resolvedDriverId.toLowerCase());
+        if (driverUser) resolvedDriverId = driverUser.id;
+      }
+      if (!resolvedDriverId || !driverUser) {
+        const autoAssigned = getAssignedDriverForArea(customerArea, db.users);
+        resolvedDriverId = autoAssigned.driver_id;
+        driverUser = db.users.find(u => u.id === resolvedDriverId);
+      }
+      const driverId = resolvedDriverId;
+      const driverName = driverUser ? driverUser.name : 'Assigned Driver';
+      const vehicle = (driverUser as any)?.vehicle || orderData.vehicle || 'Van #1';
 
       const newOrderFull = {
         ...cleanOrderRow,
         customer_name: cust?.name || orderData.customer_name || '',
         customer_phone: cust?.phone || orderData.customer_phone || '',
         customer_area: customerArea,
+        driver_id: driverId,
+        driver_name: driverName,
         items: orderData.items || [],
         created_at: nowIso,
       };
@@ -1891,8 +2107,6 @@ apiRouter.post('/orders', async (req: Request, res: Response) => {
       // Link delivery record in central database if not already present
       const existingDelInDb = db.deliveries.find(d => d.order_id === id);
       if (!existingDelInDb) {
-        const deliveryId = `del-${Date.now()}`;
-        const deliveryNumber = `DEL-${Date.now().toString().slice(-6)}`;
         db.deliveries.unshift({
           id: deliveryId,
           delivery_number: deliveryNumber,
@@ -2016,6 +2230,9 @@ apiRouter.put('/orders/:id/status', async (req: Request, res: Response) => {
       const cust = db.customers.find(c => c.id === customerId);
       const customerArea = ord?.customer_area || cust?.area || '';
       const autoAssigned = getAssignedDriverForArea(customerArea, db.users);
+      const assignedDriverId = ord?.driver_id || autoAssigned.driver_id;
+      const assignedDriverUser = assignedDriverId ? db.users.find(u => u.id === assignedDriverId) : null;
+      const assignedVehicle = (assignedDriverUser as any)?.vehicle || autoAssigned.vehicle || 'Van #1';
 
       if (supabase) {
         const { data: existingDel } = await supabase.from('deliveries').select('id, status').eq('order_id', id).maybeSingle();
@@ -2027,8 +2244,8 @@ apiRouter.put('/orders/:id/status', async (req: Request, res: Response) => {
             delivery_number: deliveryNumber,
             order_id: id,
             customer_id: customerId,
-            driver_id: autoAssigned.driver_id,
-            vehicle: autoAssigned.vehicle,
+            driver_id: assignedDriverId,
+            vehicle: assignedVehicle,
             delivery_date: ord?.delivery_date || nowIso.split('T')[0],
             delivery_time: 'Morning',
             status: 'assigned',
@@ -2066,9 +2283,9 @@ apiRouter.put('/orders/:id/status', async (req: Request, res: Response) => {
           customer_phone: ord.customer_phone || cust?.phone || '',
           customer_address: ord.delivery_address || cust?.address || '',
           customer_area: customerArea,
-          driver_id: autoAssigned.driver_id,
-          driver_name: autoAssigned.driver_name,
-          vehicle: autoAssigned.vehicle,
+          driver_id: assignedDriverId,
+          driver_name: assignedDriverUser?.name || autoAssigned.driver_name,
+          vehicle: assignedVehicle,
           delivery_date: ord.delivery_date || nowIso.split('T')[0],
           delivery_time: 'Morning',
           status: 'assigned',
@@ -2165,8 +2382,8 @@ apiRouter.get('/deliveries', async (req: Request, res: Response) => {
   let driverFilter = (req.query.driverId as string || '').trim();
   const dateFilter = (req.query.date as string || '').trim();
 
-  // If a Delivery Boy logs in, restrict deliveries directly to their assigned driver ID
-  if (isDeliveryBoy) {
+  // If a Delivery Boy logs in, they MUST ONLY see deliveries assigned to their own authenticated user ID
+  if (isDeliveryBoy && authUser) {
     driverFilter = authUser.id;
   }
 
@@ -2207,7 +2424,10 @@ apiRouter.get('/deliveries', async (req: Request, res: Response) => {
       if (statusFilter) {
         query = query.eq('status', statusFilter);
       }
-      if (driverFilter) {
+      if (isDeliveryBoy && authUser) {
+        // Enforce driver_id directly in Supabase query for Delivery Boy
+        query = query.eq('driver_id', authUser.id);
+      } else if (driverFilter) {
         query = query.eq('driver_id', driverFilter);
       }
       if (dateFilter) {
@@ -2248,12 +2468,27 @@ apiRouter.get('/deliveries', async (req: Request, res: Response) => {
             total_amount: d.order?.total_amount || d.total_amount || 0,
             driver_name: d.driver_id ? (staffMap[d.driver_id] || d.driver_name || 'Assigned Driver') : 'Unassigned',
             items,
+            notes: d.notes || (d as any).instructions || '',
           };
         });
+
+        if (isDeliveryBoy && authUser) {
+          // Strictly enforce: Delivery Boy NEVER sees another rider's delivery
+          deliveries = deliveries.filter((d: any) => d.driver_id === authUser.id);
+        }
+
         fetchedFromSupabase = true;
 
-        // Keep local central DB aligned
-        db.deliveries = deliveries;
+        // Keep local central DB aligned without wiping other deliveries
+        if (!driverFilter && !isDeliveryBoy && !statusFilter && !dateFilter && !areaFilter) {
+          db.deliveries = deliveries;
+        } else {
+          deliveries.forEach((d: any) => {
+            const idx = db.deliveries.findIndex((x: any) => x.id === d.id);
+            if (idx >= 0) db.deliveries[idx] = { ...db.deliveries[idx], ...d };
+            else db.deliveries.push(d);
+          });
+        }
         saveDatabase(db);
       } else if (error) {
         console.error('[API /deliveries] Supabase SELECT error:', error.message);
@@ -2266,7 +2501,13 @@ apiRouter.get('/deliveries', async (req: Request, res: Response) => {
   if (!fetchedFromSupabase) {
     const db = loadDatabase();
     deliveries = db.deliveries || [];
-    if (driverFilter) deliveries = deliveries.filter((d: any) => d.driver_id === driverFilter);
+
+    if (isDeliveryBoy && authUser) {
+      deliveries = deliveries.filter((d: any) => d.driver_id === authUser.id);
+    } else if (driverFilter) {
+      deliveries = deliveries.filter((d: any) => d.driver_id === driverFilter);
+    }
+
     if (statusFilter) deliveries = deliveries.filter((d: any) => d.status === statusFilter);
     if (dateFilter) deliveries = deliveries.filter((d: any) => d.delivery_date === dateFilter);
 
@@ -2889,6 +3130,148 @@ apiRouter.put('/deliveries/:id/status', async (req: Request, res: Response) => {
   }
 });
 
+apiRouter.put('/deliveries/:id/reassign', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { driver_id } = req.body;
+    if (!driver_id) {
+      return res.status(400).json({ message: 'Driver ID is required to reassign rider' });
+    }
+
+    const authUser = await getAuthUserFromRequest(req);
+    const role = authUser?.role_name || (authUser?.role_id === 'role-owner' ? 'Owner' : authUser?.role_id === 'role-manager' ? 'Manager' : 'Delivery Boy');
+    if (role !== 'Owner' && role !== 'Manager' && authUser?.role_id !== 'role-owner' && authUser?.role_id !== 'role-manager') {
+      return res.status(403).json({ message: 'Access Denied: Only Owner and Manager can reassign delivery riders.' });
+    }
+
+    const db = loadDatabase();
+    let rider = db.users.find(u => u.id === driver_id);
+    if (!rider) {
+      rider = db.users.find(u => u.email?.toLowerCase() === driver_id.toLowerCase() || u.name?.toLowerCase() === driver_id.toLowerCase());
+    }
+    if (!rider) {
+      return res.status(404).json({ message: 'Selected rider not found in staff users' });
+    }
+
+    const supabase = getServerSupabase();
+    const nowIso = new Date().toISOString();
+    const vehicle = (rider as any).vehicle || 'Van #1';
+
+    if (supabase) {
+      const { error } = await supabase
+        .from('deliveries')
+        .update({
+          driver_id: rider.id,
+          vehicle,
+          updated_at: nowIso,
+        })
+        .eq('id', id);
+
+      if (error) {
+        console.error('[API /deliveries/:id/reassign] Supabase error:', error.message);
+        return res.status(500).json({ message: error.message });
+      }
+    }
+
+    const del = db.deliveries.find(d => d.id === id);
+    const prevDriver = del?.driver_name || 'Unassigned';
+    if (del) {
+      del.driver_id = rider.id;
+      del.driver_name = rider.name;
+      del.vehicle = vehicle;
+      del.updated_at = nowIso;
+      saveDatabase(db);
+    }
+
+    // Keep linked order updated if present
+    if (del?.order_id) {
+      const ord = db.orders.find(o => o.id === del.order_id);
+      if (ord) {
+        ord.driver_id = rider.id;
+        ord.driver_name = rider.name;
+        saveDatabase(db);
+      }
+    }
+
+    await logAuditEvent({
+      req,
+      action: 'REASSIGN_DELIVERY_RIDER',
+      module: 'deliveries',
+      record_ref: id,
+      details: `Reassigned delivery #${del?.delivery_number || id} from "${prevDriver}" to "${rider.name}" (${rider.id})`,
+      old_value: { driver_id: del?.driver_id, driver_name: prevDriver },
+      new_value: { driver_id: rider.id, driver_name: rider.name },
+    });
+
+    return res.json({ success: true, delivery: del });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message || 'Failed to reassign delivery rider' });
+  }
+});
+
+apiRouter.put('/orders/:id/reassign-rider', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { driver_id } = req.body;
+    if (!driver_id) {
+      return res.status(400).json({ message: 'Driver ID is required' });
+    }
+
+    const authUser = await getAuthUserFromRequest(req);
+    const role = authUser?.role_name || (authUser?.role_id === 'role-owner' ? 'Owner' : authUser?.role_id === 'role-manager' ? 'Manager' : 'Delivery Boy');
+    if (role !== 'Owner' && role !== 'Manager' && authUser?.role_id !== 'role-owner' && authUser?.role_id !== 'role-manager') {
+      return res.status(403).json({ message: 'Access Denied: Only Owner and Manager can reassign delivery riders.' });
+    }
+
+    const db = loadDatabase();
+    let rider = db.users.find(u => u.id === driver_id);
+    if (!rider) {
+      rider = db.users.find(u => u.email?.toLowerCase() === driver_id.toLowerCase() || u.name?.toLowerCase() === driver_id.toLowerCase());
+    }
+    if (!rider) {
+      return res.status(404).json({ message: 'Selected rider not found' });
+    }
+
+    const supabase = getServerSupabase();
+    const nowIso = new Date().toISOString();
+    const vehicle = (rider as any).vehicle || 'Van #1';
+
+    // Update delivery record for this order in Supabase & central database
+    if (supabase) {
+      const { error: supaErr } = await supabase
+        .from('deliveries')
+        .update({
+          driver_id: rider.id,
+          vehicle,
+          updated_at: nowIso,
+        })
+        .eq('order_id', id);
+      if (supaErr) {
+        console.error('[API /orders/:id/reassign-rider] Supabase update notice:', supaErr.message);
+      }
+    }
+
+    const del = db.deliveries.find(d => d.order_id === id);
+    if (del) {
+      del.driver_id = rider.id;
+      del.driver_name = rider.name;
+      del.vehicle = vehicle;
+      del.updated_at = nowIso;
+    }
+
+    const ord = db.orders.find(o => o.id === id);
+    if (ord) {
+      ord.driver_id = rider.id;
+      ord.driver_name = rider.name;
+    }
+    saveDatabase(db);
+
+    return res.json({ success: true, order: ord, delivery: del });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message || 'Failed to reassign rider' });
+  }
+});
+
 // -----------------------------------------------------------------------------
 // 10. EMPTY CAN & PHYSICAL ASSET RECONCILIATION
 // -----------------------------------------------------------------------------
@@ -3038,9 +3421,7 @@ apiRouter.post('/cans/adjust-company', async (req: Request, res: Response) => {
       notes,
     } = req.body;
 
-    if (!reason || !reason.trim()) {
-      return res.status(400).json({ message: 'Mandatory audit reason is required for company can adjustment' });
-    }
+    const auditReason = (reason && String(reason).trim()) ? String(reason).trim() : 'Company physical can calibration';
 
     const authUser = await getAuthUserFromRequest(req);
     const db = loadDatabase();
@@ -3127,7 +3508,7 @@ apiRouter.post('/cans/adjust-company', async (req: Request, res: Response) => {
       movement_type: totalDelta >= 0 ? 'company_cans_addition' : 'company_cans_reduction',
       quantity: totalDelta,
       balance_after: newTotal,
-      reason: reason.trim(),
+      reason: auditReason,
       notes: notes?.trim() || '',
       user_name: operatorName,
       user_id: authUser?.id || undefined,
@@ -3156,7 +3537,7 @@ apiRouter.post('/cans/adjust-company', async (req: Request, res: Response) => {
           quantity: totalDelta,
           previous_stock: previousTotal,
           new_stock: newTotal,
-          reason: `${reason.trim()}${notes ? ` | Note: ${notes.trim()}` : ''}`,
+          reason: `${auditReason}${notes ? ` | Note: ${notes.trim()}` : ''}`,
           reference_type: 'company_asset_adjustment',
           user_id: operatorName,
           created_at: nowIso,
@@ -3172,7 +3553,7 @@ apiRouter.post('/cans/adjust-company', async (req: Request, res: Response) => {
       action: 'ADJUST_COMPANY_CANS',
       module: 'cans',
       record_ref: 'prod-19l-can',
-      details: `Total company physical 19L cans adjusted: ${previousTotal} → ${newTotal} (${totalDelta >= 0 ? '+' : ''}${totalDelta}) [Empty in Plant: ${newEmpty}, Filled in Plant: ${filledInWarehouse}, With Customers: ${withCustomers}, Damaged: ${newDamaged}, Lost: ${newLost}] | Reason: ${reason.trim()}${notes ? ` | Note: ${notes.trim()}` : ''}`,
+      details: `Total company physical 19L cans adjusted: ${previousTotal} → ${newTotal} (${totalDelta >= 0 ? '+' : ''}${totalDelta}) [Empty in Plant: ${newEmpty}, Filled in Plant: ${filledInWarehouse}, With Customers: ${withCustomers}, Damaged: ${newDamaged}, Lost: ${newLost}] | Reason: ${auditReason}${notes ? ` | Note: ${notes.trim()}` : ''}`,
       old_value: {
         total_company_cans: previousTotal,
         empty_in_plant: currentEmpty,
@@ -3226,9 +3607,7 @@ apiRouter.post('/cans/adjust-customer', async (req: Request, res: Response) => {
     if (!customer_id) {
       return res.status(400).json({ message: 'Customer selection is required' });
     }
-    if (!reason || !reason.trim()) {
-      return res.status(400).json({ message: 'Mandatory audit reason is required for can adjustment' });
-    }
+    const auditReason = (reason && String(reason).trim()) ? String(reason).trim() : 'Customer can ledger adjustment';
 
     const qty = Number(quantity);
     if (isNaN(qty) || qty < 0) {
@@ -3327,7 +3706,7 @@ apiRouter.post('/cans/adjust-customer', async (req: Request, res: Response) => {
           movement_type: change_type,
           quantity: delta,
           balance_after: newCans,
-          reason: `${reason.trim()}${notes ? ` | Note: ${notes.trim()}` : ''}`,
+          reason: `${auditReason}${notes ? ` | Note: ${notes.trim()}` : ''}`,
           user_id: authUser?.id || null,
           created_at: nowIso,
         });
@@ -3342,13 +3721,13 @@ apiRouter.post('/cans/adjust-customer', async (req: Request, res: Response) => {
       action: 'ADJUST_CUSTOMER_CANS',
       module: 'cans',
       record_ref: customer_id,
-      details: `Customer cans adjusted for "${cust.name}" (${cust.area}): ${change_type} (${delta >= 0 ? '+' : ''}${delta}) | Balance: ${prevCans} → ${newCans} cans | Reason: ${reason.trim()}${notes ? ` | Note: ${notes.trim()}` : ''}`,
+      details: `Customer cans adjusted for "${cust.name}" (${cust.area}): ${change_type} (${delta >= 0 ? '+' : ''}${delta}) | Balance: ${prevCans} → ${newCans} cans | Reason: ${auditReason}${notes ? ` | Note: ${notes.trim()}` : ''}`,
       old_value: { cans_held: prevCans },
       new_value: {
         cans_held: newCans,
         change_type,
         delta,
-        reason: reason.trim(),
+        reason: auditReason,
         notes: notes?.trim() || null,
       },
     });

@@ -22,6 +22,7 @@ export const InventoryPage: React.FC = () => {
   const toast = useToast();
 
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -40,14 +41,24 @@ export const InventoryPage: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [invRes, movRes] = await Promise.all([
+      const [invRes, movRes, prodRes] = await Promise.all([
         api.get<InventoryItem[]>('/inventory'),
         api.get<InventoryMovement[]>('/inventory/movements'),
+        api.get<Product[]>('/products'),
       ]);
-      setInventory(invRes);
-      setMovements(movRes);
-      if (invRes.length > 0 && !adjustForm.product_id) {
-        setAdjustForm((prev) => ({ ...prev, product_id: invRes[0].product_id }));
+      setInventory(invRes || []);
+      setMovements(movRes || []);
+      const activeProds = (prodRes || []).filter(
+        (p: any) => p.is_active === 1 || p.is_active === true || p.is_active === '1' || p.is_active === undefined || p.is_active === null
+      );
+      setProducts(activeProds);
+
+      if (!adjustForm.product_id) {
+        if (activeProds.length > 0) {
+          setAdjustForm((prev) => ({ ...prev, product_id: activeProds[0].id }));
+        } else if (invRes && invRes.length > 0) {
+          setAdjustForm((prev) => ({ ...prev, product_id: invRes[0].product_id }));
+        }
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to load inventory');
@@ -62,8 +73,9 @@ export const InventoryPage: React.FC = () => {
 
   const handleAdjustStock = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!adjustForm.reason) {
-      toast.error('Audit rule: Adjustment reason is mandatory');
+
+    if (!adjustForm.product_id) {
+      toast.error('Please select a valid product to adjust');
       return;
     }
 
@@ -72,13 +84,13 @@ export const InventoryPage: React.FC = () => {
         product_id: adjustForm.product_id,
         stock_type: adjustForm.stock_type,
         quantity: Number(adjustForm.quantity),
-        reason: adjustForm.reason,
+        reason: adjustForm.reason.trim() || 'Physical inventory calibration',
       });
 
-      toast.success('Inventory adjusted and audit log created!');
+      toast.success('Inventory adjusted in Supabase and audit log created!');
       setIsAdjustModalOpen(false);
       setAdjustForm({
-        product_id: inventory[0]?.product_id || '',
+        product_id: products[0]?.id || inventory[0]?.product_id || '',
         stock_type: 'filled_stock',
         quantity: '1',
         reason: '',
@@ -104,7 +116,7 @@ export const InventoryPage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">Warehouse & Stock Control</h2>
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">Warehouse Inventory</h2>
           <p className="text-xs text-slate-500 mt-0.5">
             Filled water ready for delivery, empty sanitized cans, and audited physical inventory movements.
           </p>
@@ -131,7 +143,7 @@ export const InventoryPage: React.FC = () => {
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          Finished Stock & Store
+          Warehouse Stock
         </button>
         <button
           onClick={() => setActiveTab('movements')}
@@ -313,7 +325,7 @@ export const InventoryPage: React.FC = () => {
         isOpen={isAdjustModalOpen}
         onClose={() => setIsAdjustModalOpen(false)}
         title="Audited Stock Adjustment"
-        description="Manual stock corrections require a documented reason and create an immutable audit record."
+        description="Manual stock corrections update real stock levels and create an audit log."
         maxWidth="md"
       >
         <form onSubmit={handleAdjustStock} className="space-y-4">
@@ -323,13 +335,20 @@ export const InventoryPage: React.FC = () => {
               required
               value={adjustForm.product_id}
               onChange={(e) => setAdjustForm({ ...adjustForm, product_id: e.target.value })}
-              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500"
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500 font-medium text-slate-800"
             >
-              {inventory.map((inv) => (
-                <option key={inv.product_id} value={inv.product_id}>
-                  {inv.product_name} ({inv.size})
-                </option>
-              ))}
+              <option value="">-- Select Active Product --</option>
+              {products.length > 0
+                ? products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.size || p.unit})
+                    </option>
+                  ))
+                : inventory.map((inv) => (
+                    <option key={inv.product_id} value={inv.product_id}>
+                      {inv.product_name || inv.product_id} ({inv.size || inv.unit})
+                    </option>
+                  ))}
             </select>
           </div>
 
@@ -366,14 +385,13 @@ export const InventoryPage: React.FC = () => {
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Mandatory Reason for Adjustment *
+              Reason for Adjustment (Optional)
             </label>
             <textarea
               rows={2}
-              required
               value={adjustForm.reason}
               onChange={(e) => setAdjustForm({ ...adjustForm, reason: e.target.value })}
-              placeholder="e.g. Broken valve write-off, physical cycle count calibration, bottle leak detected..."
+              placeholder="e.g. Broken valve write-off, physical cycle count calibration, bottle leak detected (optional)"
               className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg"
             />
           </div>

@@ -106,6 +106,9 @@ async function handleSupabaseRoute<T>(method: string, endpoint: string, body?: a
 
   // 3. STAFF MANAGEMENT
   if (pathParts[0] === 'staff') {
+    if (pathParts[1] === 'riders') {
+      return (await SupabaseDataService.getDeliveryRiders()) as unknown as T;
+    }
     if (method === 'GET') {
       return (await SupabaseDataService.getStaff()) as unknown as T;
     }
@@ -116,6 +119,10 @@ async function handleSupabaseRoute<T>(method: string, endpoint: string, body?: a
       await SupabaseDataService.updateStaff(pathParts[1], body);
       return { success: true } as unknown as T;
     }
+  }
+
+  if (pathParts[0] === 'riders') {
+    return (await SupabaseDataService.getDeliveryRiders()) as unknown as T;
   }
 
   // 4. CUSTOMERS
@@ -183,6 +190,9 @@ async function handleSupabaseRoute<T>(method: string, endpoint: string, body?: a
 
   // 8. ORDERS
   if (pathParts[0] === 'orders') {
+    if (pathParts[2] === 'reassign-rider' && (method === 'PUT' || method === 'PATCH')) {
+      return (await SupabaseDataService.reassignDeliveryRiderForOrder(pathParts[1], body?.driver_id)) as unknown as T;
+    }
     if (pathParts[2] === 'status' && (method === 'PUT' || method === 'PATCH')) {
       return (await SupabaseDataService.updateOrderStatus(pathParts[1], body?.status, body?.payment_status)) as unknown as T;
     }
@@ -199,6 +209,9 @@ async function handleSupabaseRoute<T>(method: string, endpoint: string, body?: a
 
   // 9. DELIVERIES
   if (pathParts[0] === 'deliveries') {
+    if (pathParts[2] === 'reassign' && (method === 'PUT' || method === 'PATCH')) {
+      return (await SupabaseDataService.reassignDeliveryRider(pathParts[1], body?.driver_id)) as unknown as T;
+    }
     if (pathParts[1] === 'create-for-order' && method === 'POST') {
       return (await SupabaseDataService.createDeliveryForOrder(body)) as unknown as T;
     }

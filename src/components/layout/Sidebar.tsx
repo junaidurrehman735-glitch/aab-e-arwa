@@ -65,7 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       group: 'Warehouse & Stock',
       items: [
-        { id: 'inventory', label: 'Finished Stock & Store', icon: Package, module: 'inventory' },
+        { id: 'inventory', label: 'Inventory', icon: Package, module: 'inventory' },
         { id: 'cans', label: 'Empty Can Tracking', icon: RotateCcw, module: 'cans' },
       ],
     },
